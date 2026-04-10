@@ -13,22 +13,29 @@
 	let fileInput: HTMLInputElement;
 	let cameraInput: HTMLInputElement;
 
-	async function handleFileChange(event: Event, isCamera = false) {
+	async function handleFileChange(event: Event) {
 		const input = event.target as HTMLInputElement;
 		if (!input.files || input.files.length === 0) return;
 
-		const file = input.files[0];
+		const files = Array.from(input.files);
 		isOpen = false;
 		isProcessing = true;
 
 		try {
-			const compressedBase64 = await compressImage(file);
+			// Process all images in parallel
+			const imageResults = await Promise.all(files.map(async (file) => {
+				const compressedBase64 = await compressImage(file);
+				return {
+					image: compressedBase64.split(',')[1],
+					mimeType: file.type
+				};
+			}));
+
 			const response = await fetch('/api/ocr', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
-					image: compressedBase64.split(',')[1],
-					mimeType: file.type,
+					images: imageResults,
 					userId
 				})
 			});
@@ -143,7 +150,7 @@
 			</div>
 
 			<p class="text-xs text-gray-400 text-center px-4">
-				時間割のスクリーンショットなどをアップロードすると、AIが自動で内容を読み取ります。
+				時間割のスクリーンショット（複数可）をアップロードすると、AIが自動で統合して読み取ります。
 			</p>
 		</div>
 	</div>
@@ -153,6 +160,7 @@
 <input
 	type="file"
 	accept="image/*"
+	multiple={true}
 	bind:this={fileInput}
 	class="hidden"
 	onchange={(e) => handleFileChange(e)}
@@ -163,7 +171,7 @@
 	capture="environment"
 	bind:this={cameraInput}
 	class="hidden"
-	onchange={(e) => handleFileChange(e, true)}
+	onchange={(e) => handleFileChange(e)}
 />
 
 <!-- Processing Loader -->
