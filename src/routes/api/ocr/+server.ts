@@ -5,16 +5,28 @@ import { supabase } from '$lib/supabaseClient';
 
 export const POST: RequestHandler = async ({ request, locals }) => {
 	try {
-		const { image, mimeType, userId } = await request.json();
+		const { images, userId } = await request.json();
 
-		if (!image || !mimeType || !userId) {
+		if (!images || !Array.isArray(images) || !userId) {
 			return json({ error: 'Missing required fields' }, { status: 400 });
 		}
 
-		// 1. Extract data using Gemini
-		const extractedClasses = await extractTimetableFromImage(image, mimeType);
+		// 1. Extract data from all images concurrently
+		const results = await Promise.all(
+			images.map(img => extractTimetableFromImage(img.image, img.mimeType))
+		);
 
-		// 2. Fetch current user classes to perform diff
+		// 2. Merge results with conflict resolution (later images overwrite)
+		const mergedMap = new Map<string, any>();
+		for (const extractedClasses of results) {
+			for (const item of extractedClasses) {
+				const slotKey = `${item.day_of_week}|${item.period}`;
+				mergedMap.set(slotKey, item);
+			}
+		}
+		const finalExtractedClasses = Array.from(mergedMap.values());
+
+		// 3. Fetch current user classes to perform diff
 		const { data: currentLinks, error: fetchError } = await supabase
 			.from('User_Classes')
 			.select(`
@@ -36,7 +48,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		const extractedKeys = new Set();
 		const toAdd = [];
 
-		for (const item of extractedClasses) {
+		for (const item of finalExtractedClasses) {
 			const key = `${item.name}|${item.day_of_week}|${item.period}`;
 			extractedKeys.add(key);
 
@@ -45,7 +57,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			}
 		}
 
-		// 3. Remove classes that are no longer in the image
+		// 4. Remove classes that are no longer in the image(s)
 		const toDelete = (currentLinks || []).filter((link: any) => {
 			const c = link.Classes;
 			const key = `${c.name}|${c.day_of_week}|${c.period}`;
@@ -58,7 +70,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				.in('id', toDelete.map(d => (d as any).id));
 		}
 
-		// 4. Add new classes
+		// 5. Add new classes
 		for (const item of toAdd) {
 			// Find or create the class
 			const { data: classData } = await (supabase.from('Classes') as any)
@@ -100,7 +112,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			success: true, 
 			added: toAdd.length, 
 			removed: toDelete.length,
-			total: extractedClasses.length 
+			total: finalExtractedClasses.length 
 		});
 	} catch (error: any) {
 		console.error('OCR Error:', error);
