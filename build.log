@@ -1,0 +1,166 @@
+
+> momotime@0.0.1 build
+> vite build
+
+vite v8.0.8 building ssr environment for production...
+[2Ktransforming...1:20:57 PM [vite-plugin-svelte] src/routes/+page.svelte:310:2 `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions
+308:     onkeydown={(e) => e.key === 'Escape' && (isEditMode = false)}
+309:   >
+310:     <div 
+              ^
+311:       class="bg-white w-full max-w-xl rounded-t-[40px] p-8 pb-12 flex flex-col gap-6 shadow-2xl max-h-[90vh] overflow-y-auto"
+312:       transition:slide={{ axis: 'y', duration: 300 }}
+1:20:57 PM [vite-plugin-svelte] src/routes/tasks/+page.svelte:202:5 Visible, non-interactive elements with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events
+200:         >
+201:           <!-- Icon / Class Color -->
+202:           <div 
+                    ^
+203:             class="w-10 h-10 rounded-full shrink-0 flex items-center justify-center text-white font-bold text-[10px] shadow-sm transition-transform active:scale-90 cursor-pointer"
+204:             style="background-color: {getTaskColor(task.class_id)}"
+1:20:57 PM [vite-plugin-svelte] src/routes/tasks/+page.svelte:202:5 `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions
+200:         >
+201:           <!-- Icon / Class Color -->
+202:           <div 
+                    ^
+203:             class="w-10 h-10 rounded-full shrink-0 flex items-center justify-center text-white font-bold text-[10px] shadow-sm transition-transform active:scale-90 cursor-pointer"
+204:             style="background-color: {getTaskColor(task.class_id)}"
+1:20:57 PM [vite-plugin-svelte] src/routes/tasks/+page.svelte:269:2 `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions
+267:     onclick={() => isCreateModalOpen = false}
+268:   >
+269:     <div 
+              ^
+270:       class="bg-white w-full max-w-xl rounded-t-[40px] p-8 pb-12 flex flex-col gap-6 shadow-2xl"
+271:       transition:slide={{ axis: 'y', duration: 300 }}
+✓ 3786 modules transformed.
+rendering chunks...
+vite v8.0.8 building client environment for production...
+[2Ktransforming...1:20:58 PM [vite-plugin-svelte] src/routes/tasks/+page.svelte:202:5 Visible, non-interactive elements with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events
+200:         >
+201:           <!-- Icon / Class Color -->
+202:           <div 
+                    ^
+203:             class="w-10 h-10 rounded-full shrink-0 flex items-center justify-center text-white font-bold text-[10px] shadow-sm transition-transform active:scale-90 cursor-pointer"
+204:             style="background-color: {getTaskColor(task.class_id)}"
+1:20:58 PM [vite-plugin-svelte] src/routes/tasks/+page.svelte:202:5 `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions
+200:         >
+201:           <!-- Icon / Class Color -->
+202:           <div 
+                    ^
+203:             class="w-10 h-10 rounded-full shrink-0 flex items-center justify-center text-white font-bold text-[10px] shadow-sm transition-transform active:scale-90 cursor-pointer"
+204:             style="background-color: {getTaskColor(task.class_id)}"
+1:20:58 PM [vite-plugin-svelte] src/routes/tasks/+page.svelte:269:2 `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions
+267:     onclick={() => isCreateModalOpen = false}
+268:   >
+269:     <div 
+              ^
+270:       class="bg-white w-full max-w-xl rounded-t-[40px] p-8 pb-12 flex flex-col gap-6 shadow-2xl"
+271:       transition:slide={{ axis: 'y', duration: 300 }}
+1:20:58 PM [vite-plugin-svelte] src/routes/+page.svelte:310:2 `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions
+308:     onkeydown={(e) => e.key === 'Escape' && (isEditMode = false)}
+309:   >
+310:     <div 
+              ^
+311:       class="bg-white w-full max-w-xl rounded-t-[40px] p-8 pb-12 flex flex-col gap-6 shadow-2xl max-h-[90vh] overflow-y-auto"
+312:       transition:slide={{ axis: 'y', duration: 300 }}
+✓ 3892 modules transformed.
+rendering chunks...
+computing gzip size...
+.svelte-kit/output/client/_app/version.json                         0.02 kB │ gzip:   0.04 kB
+.svelte-kit/output/client/.vite/manifest.json                       7.27 kB │ gzip:   1.02 kB
+.svelte-kit/output/client/_app/immutable/assets/2.Ba6nEw8J.css      0.17 kB │ gzip:   0.13 kB
+.svelte-kit/output/client/_app/immutable/assets/3.L5bcgqYx.css      0.38 kB │ gzip:   0.22 kB
+.svelte-kit/output/client/_app/immutable/assets/0.D_lW1VqB.css     37.19 kB │ gzip:   7.26 kB
+.svelte-kit/output/client/_app/immutable/chunks/6a5d4krd.js         0.02 kB │ gzip:   0.04 kB
+.svelte-kit/output/client/_app/immutable/chunks/CNAbRggN.js         0.02 kB │ gzip:   0.04 kB
+.svelte-kit/output/client/_app/immutable/chunks/CT0T0Gak.js         0.06 kB │ gzip:   0.08 kB
+.svelte-kit/output/client/_app/immutable/entry/start.C2yCUABd.js    0.08 kB │ gzip:   0.09 kB
+.svelte-kit/output/client/_app/immutable/nodes/1.BrZ-RQh3.js        0.37 kB │ gzip:   0.26 kB
+.svelte-kit/output/client/_app/immutable/chunks/NSgYgbEd.js         0.40 kB │ gzip:   0.29 kB
+.svelte-kit/output/client/_app/immutable/chunks/Dn0WVIES.js         0.40 kB │ gzip:   0.31 kB
+.svelte-kit/output/client/_app/immutable/chunks/YQlKfCwr.js         0.42 kB │ gzip:   0.31 kB
+.svelte-kit/output/client/_app/immutable/chunks/BriUK3m8.js         0.44 kB │ gzip:   0.32 kB
+.svelte-kit/output/client/_app/immutable/chunks/Cj81VsLI.js         0.48 kB │ gzip:   0.33 kB
+.svelte-kit/output/client/_app/immutable/chunks/CyJLhx0j.js         0.53 kB │ gzip:   0.36 kB
+.svelte-kit/output/client/_app/immutable/chunks/q_YsAbYs.js         0.75 kB │ gzip:   0.40 kB
+.svelte-kit/output/client/_app/immutable/chunks/CdnXIVhf.js         0.76 kB │ gzip:   0.33 kB
+.svelte-kit/output/client/_app/immutable/chunks/QypaylOM.js         0.85 kB │ gzip:   0.44 kB
+.svelte-kit/output/client/_app/immutable/chunks/CoyAFdqI.js         1.03 kB │ gzip:   0.43 kB
+.svelte-kit/output/client/_app/immutable/chunks/DXb0ZbaM.js         1.20 kB │ gzip:   0.68 kB
+.svelte-kit/output/client/_app/immutable/entry/app.rHmT_Oyd.js      3.82 kB │ gzip:   1.59 kB
+.svelte-kit/output/client/_app/immutable/nodes/0.CapzIp7V.js        5.01 kB │ gzip:   2.18 kB
+.svelte-kit/output/client/_app/immutable/nodes/4.CyuzPewq.js        5.84 kB │ gzip:   2.23 kB
+.svelte-kit/output/client/_app/immutable/nodes/7.CP_0XxgN.js        6.13 kB │ gzip:   2.53 kB
+.svelte-kit/output/client/_app/immutable/nodes/6.vpABnmCc.js        8.69 kB │ gzip:   3.44 kB
+.svelte-kit/output/client/_app/immutable/nodes/2.CJ21fhux.js       17.17 kB │ gzip:   6.53 kB
+.svelte-kit/output/client/_app/immutable/chunks/DQq64ncv.js        26.03 kB │ gzip:  10.16 kB
+.svelte-kit/output/client/_app/immutable/nodes/5.BKP3vxKp.js       40.47 kB │ gzip:  14.69 kB
+.svelte-kit/output/client/_app/immutable/chunks/C_WozglH.js        58.02 kB │ gzip:  22.25 kB
+.svelte-kit/output/client/_app/immutable/chunks/BXLzd7xs.js       189.97 kB │ gzip:  50.14 kB
+.svelte-kit/output/client/_app/immutable/nodes/3.C-GMwNIO.js      380.69 kB │ gzip: 112.44 kB
+
+✓ built in 1.09s
+computing gzip size...
+.svelte-kit/output/server/.vite/manifest.json                            7.09 kB │ gzip:  0.95 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.Ba6nEw8J.css       0.17 kB │ gzip:  0.13 kB
+.svelte-kit/output/server/_app/immutable/assets/_page.L5bcgqYx.css       0.38 kB │ gzip:  0.22 kB
+.svelte-kit/output/server/_app/immutable/assets/_layout.CR-qKs_7.css    36.28 kB │ gzip:  7.23 kB
+.svelte-kit/output/server/chunks/navigation.js                           0.03 kB │ gzip:  0.05 kB
+.svelte-kit/output/server/chunks/index-server2.js                        0.03 kB │ gzip:  0.05 kB
+.svelte-kit/output/server/chunks/supabaseClient.js                       0.26 kB │ gzip:  0.20 kB
+.svelte-kit/output/server/internal.js                                    0.40 kB │ gzip:  0.20 kB
+.svelte-kit/output/server/entries/fallbacks/error.svelte.js              0.42 kB │ gzip:  0.27 kB
+.svelte-kit/output/server/chunks/plus.js                                 0.61 kB │ gzip:  0.36 kB
+.svelte-kit/output/server/chunks/user.js                                 0.68 kB │ gzip:  0.40 kB
+.svelte-kit/output/server/chunks/circle-check.js                         0.68 kB │ gzip:  0.39 kB
+.svelte-kit/output/server/chunks/message-circle.js                       0.74 kB │ gzip:  0.44 kB
+.svelte-kit/output/server/chunks/calendar.js                             0.78 kB │ gzip:  0.41 kB
+.svelte-kit/output/server/chunks/users.js                                0.80 kB │ gzip:  0.43 kB
+.svelte-kit/output/server/chunks/environment.js                          1.31 kB │ gzip:  0.56 kB
+.svelte-kit/output/server/chunks/qr-code.js                              1.73 kB │ gzip:  0.54 kB
+.svelte-kit/output/server/entries/pages/user/_handle_/_page.svelte.js    1.90 kB │ gzip:  0.80 kB
+.svelte-kit/output/server/entries/pages/tasks/_page.svelte.js            2.16 kB │ gzip:  0.92 kB
+.svelte-kit/output/server/chunks/state.js                                3.12 kB │ gzip:  1.19 kB
+.svelte-kit/output/server/entries/pages/_layout.svelte.js                4.23 kB │ gzip:  1.40 kB
+.svelte-kit/output/server/entries/endpoints/api/ocr/_server.ts.js        5.35 kB │ gzip:  2.55 kB
+.svelte-kit/output/server/entries/pages/login/_page.svelte.js            5.67 kB │ gzip:  1.58 kB
+.svelte-kit/output/server/entries/pages/friends/_page.svelte.js          6.92 kB │ gzip:  2.04 kB
+.svelte-kit/output/server/chunks/shared.js                              10.20 kB │ gzip:  3.33 kB
+.svelte-kit/output/server/entries/pages/_page.svelte.js                 10.72 kB │ gzip:  3.26 kB
+.svelte-kit/output/server/entries/pages/profile/_page.svelte.js         10.79 kB │ gzip:  2.95 kB
+.svelte-kit/output/server/chunks/exports.js                             11.22 kB │ gzip:  3.50 kB
+.svelte-kit/output/server/chunks/Icon.js                                13.57 kB │ gzip:  3.10 kB
+.svelte-kit/output/server/chunks/internal.js                            20.21 kB │ gzip:  6.25 kB
+.svelte-kit/output/server/chunks/utils.js                               28.76 kB │ gzip:  8.35 kB
+.svelte-kit/output/server/remote-entry.js                               35.25 kB │ gzip:  7.97 kB
+.svelte-kit/output/server/chunks/client.js                              45.78 kB │ gzip: 13.57 kB
+.svelte-kit/output/server/index.js                                     119.63 kB │ gzip: 30.50 kB
+.svelte-kit/output/server/chunks/index-server.js                       130.88 kB │ gzip: 34.10 kB
+
+✓ built in 2.70s
+
+Run npm run preview to preview your production build locally.
+
+> Using @sveltejs/adapter-vercel
+error during build:
+Error: Unsupported Node.js version: v25.8.1. Please use Node 20, 22, or 24 to build your project, or explicitly specify a runtime in your adapter configuration.
+    at get_default_runtime (file:///Users/haru/Desktop/project/momotime/node_modules/@sveltejs/adapter-vercel/utils.js:132:9)
+    at resolve_runtime (file:///Users/haru/Desktop/project/momotime/node_modules/@sveltejs/adapter-vercel/utils.js:116:46)
+    at adapt (file:///Users/haru/Desktop/project/momotime/node_modules/@sveltejs/adapter-vercel/index.js:274:21)
+    at adapt (file:///Users/haru/Desktop/project/momotime/node_modules/@sveltejs/kit/src/core/adapt/index.js:41:8)
+    at finalise (file:///Users/haru/Desktop/project/momotime/node_modules/@sveltejs/kit/src/exports/vite/index.js:1381:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async PluginContextImpl.handler (file:///Users/haru/Desktop/project/momotime/node_modules/@sveltejs/kit/src/exports/vite/index.js:1412:5)
+    at async plugin (file:///Users/haru/Desktop/project/momotime/node_modules/rolldown/dist/shared/bindingify-input-options-DYpBf1OG.mjs:1390:4)
+    at async plugin.<computed> (file:///Users/haru/Desktop/project/momotime/node_modules/rolldown/dist/shared/bindingify-input-options-DYpBf1OG.mjs:1636:12) {
+  code: 'PLUGIN_ERROR',
+  plugin: 'vite-plugin-sveltekit-compile',
+  hook: 'closeBundle'
+}
