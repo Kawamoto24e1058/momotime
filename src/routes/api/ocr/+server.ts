@@ -18,10 +18,20 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 		// 2. Merge results with conflict resolution (later images overwrite)
 		const mergedMap = new Map<string, any>();
+		const dayMap: Record<string, number> = { '月': 0, '火': 1, '水': 2, '木': 3, '金': 4, '土': 5, '日': 6 };
 		for (const extractedClasses of results) {
 			for (const item of extractedClasses) {
-				const slotKey = `${item.day_of_week}|${item.period}`;
-				mergedMap.set(slotKey, item);
+				const dayIdx = dayMap[item.day] ?? 0;
+				const slotKey = `${dayIdx}|${item.period}`;
+				// Map to database schema
+				mergedMap.set(slotKey, {
+					name: item.name,
+					teacher: item.professor || null,
+					room: null, // Room mapping is no longer in prompt schema
+					day_of_week: dayIdx,
+					period: item.period,
+					is_remote: item.isRemote || false
+				});
 			}
 		}
 		const finalExtractedClasses = Array.from(mergedMap.values());
@@ -91,7 +101,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 						teacher: item.teacher,
 						room: item.room,
 						day_of_week: item.day_of_week,
-						period: item.period
+						period: item.period,
+						is_remote: item.is_remote
 					})
 					.select()
 					.single();
