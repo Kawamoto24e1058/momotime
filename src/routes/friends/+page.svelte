@@ -17,7 +17,8 @@
 	import { supabase } from '$lib/supabaseClient';
 	import { goto } from '$app/navigation';
 	import { toasts } from '$lib/stores/toasts';
-	import { Html5QrcodeScanner } from 'html5-qrcode';
+	import MyQR from '$lib/components/MyQR.svelte';
+	import QRScanner from '$lib/components/QRScanner.svelte';
 
 	let userId = $state<string | null>(null);
 	let friends = $state<any[]>([]);
@@ -25,8 +26,8 @@
 	let searchQuery = $state('');
 	let searchResults = $state<any[]>([]);
 	let isLoading = $state(true);
-	let isScannerOpen = $state(false);
-	let scanner: any = null;
+	let currentUserProfile = $state<any>(null); // Store current user for handle_id
+	let activeTab = $state<'list' | 'myqr' | 'scan'>('list');
 
 	async function fetchData() {
 		isLoading = true;
@@ -34,6 +35,13 @@
 			const { data: { user } } = await supabase.auth.getUser();
 			if (!user) return;
 			userId = user.id;
+
+			const { data: userData, error: userError } = await supabase
+				.from('Users')
+				.select('*')
+				.eq('id', userId)
+				.single() as any;
+			if (!userError) currentUserProfile = userData;
 
 			const { data: followsData, error: followsError } = await supabase
 				.from('Follows')
@@ -53,34 +61,12 @@
 		}
 	}
 
-	async function startScanner() {
-		isScannerOpen = true;
-		setTimeout(() => {
-			scanner = new Html5QrcodeScanner(
-				"reader",
-				{ fps: 10, qrbox: { width: 250, height: 250 } },
-				/* verbose= */ false
-			);
-			scanner.render((decodedText: string) => {
-				// Check if it's a Momotime URL
-				if (decodedText.includes('/user/')) {
-					const handle = decodedText.split('/user/').pop();
-					if (handle) {
-						stopScanner();
-						isScannerOpen = false;
-						goto(`/user/${handle}`);
-					}
-				}
-			}, (error: any) => {
-				// Quietly ignore errors (scanning is an iterative process)
-			});
-		}, 100);
-	}
-
-	function stopScanner() {
-		if (scanner) {
-			scanner.clear();
-			scanner = null;
+	function handleScanSuccess(decodedText: string) {
+		if (decodedText.includes('/user/')) {
+			const handle = decodedText.split('/user/').pop();
+			if (handle) {
+				goto(`/user/${handle}`);
+			}
 		}
 	}
 
@@ -138,18 +124,37 @@
 		<h1 class="text-2xl font-black italic tracking-tighter">Friends</h1>
 		<div class="flex gap-2">
 			<button 
-				class="w-10 h-10 bg-white border border-border rounded-xl flex items-center justify-center text-gray-500 shadow-sm active:scale-95 transition-all"
-				onclick={startScanner}
-			>
-				<QrCode size={20} />
-			</button>
-			<button 
 				class="w-10 h-10 bg-black text-white rounded-xl flex items-center justify-center shadow-lg active:scale-95 transition-all"
 			>
 				<Plus size={20} />
 			</button>
 		</div>
 	</header>
+
+	<!-- Tabs -->
+	<div class="flex gap-2 pb-2 overflow-x-auto no-scrollbar scroll-smooth">
+		<button
+			class="px-5 py-2.5 rounded-full text-sm font-bold transition-all whitespace-nowrap relative {activeTab === 'list' ? 'bg-black text-white shadow-md' : 'bg-white border border-border text-gray-400 hover:border-gray-400'}"
+			onclick={() => (activeTab = 'list')}
+		>
+			友達リスト
+		</button>
+		<button
+			class="px-5 py-2.5 rounded-full text-sm font-bold transition-all whitespace-nowrap relative {activeTab === 'myqr' ? 'bg-black text-white shadow-md' : 'bg-white border border-border text-gray-400 hover:border-gray-400'}"
+			onclick={() => (activeTab = 'myqr')}
+		>
+			マイQRコード
+		</button>
+		<button
+			class="px-5 py-2.5 rounded-full text-sm font-bold transition-all whitespace-nowrap relative flex items-center gap-2 {activeTab === 'scan' ? 'bg-black text-white shadow-md' : 'bg-white border border-border text-gray-400 hover:border-gray-400'}"
+			onclick={() => (activeTab = 'scan')}
+		>
+			<ScanLine size={16} />
+			スキャン
+		</button>
+	</div>
+
+	{#if activeTab === 'list'}
 
 	<!-- Search Bar -->
 	<div class="relative">
@@ -261,66 +266,16 @@
 			{/each}
 		</div>
 	</section>
+	{:else if activeTab === 'myqr'}
+		<div in:fade={{ duration: 200 }} class="w-full flex items-center justify-center py-8">
+			<MyQR handleId={currentUserProfile?.handle_id || 'momo-user-unknown'} size={220} />
+		</div>
+	{:else if activeTab === 'scan'}
+		<div in:fade={{ duration: 200 }} class="w-full flex items-center justify-center py-8">
+			<QRScanner onScanSuccess={handleScanSuccess} />
+		</div>
+	{/if}
 </div>
-
-<!-- QR Scanner Modal -->
-{#if isScannerOpen}
-	<!-- svelte-ignore a11y_click_events_have_key_events -->
-	<div 
-		class="fixed inset-0 bg-black/90 backdrop-blur-xl z-[200] flex flex-col p-6 w-full h-full cursor-default text-left"
-		transition:fade
-		onclick={() => { stopScanner(); isScannerOpen = false; }}
-		role="presentation"
-	>
-		<div class="flex justify-between items-center mb-12">
-			<div class="flex flex-col">
-				<h2 class="text-xl font-black text-white italic tracking-tighter">QR Scanner</h2>
-				<p class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Scan profile to follow</p>
-			</div>
-			<div 
-				class="w-12 h-12 bg-white/10 text-white rounded-2xl flex items-center justify-center active:scale-95 transition-all cursor-pointer"
-				onclick={() => { stopScanner(); isScannerOpen = false; }}
-				role="button"
-				tabindex="0"
-			>
-				<X size={24} />
-			</div>
-		</div>
-
-		<div class="flex-1 flex flex-col items-center justify-center gap-12">
-			<div 
-				class="relative w-full max-w-sm aspect-square bg-white/5 rounded-[48px] overflow-hidden border-2 border-white/10 shadow-2xl cursor-default"
-				onclick={(e) => e.stopPropagation()}
-				role="presentation"
-			>
-				<div id="reader" class="w-full h-full"></div>
-				
-				<!-- Scanner Frame Decoration -->
-				<div class="absolute inset-0 border-[40px] border-black/20 pointer-events-none flex items-center justify-center">
-					<div class="w-64 h-64 border-2 border-white/40 rounded-3xl relative">
-						<div class="absolute -top-1 -left-1 w-8 h-8 border-t-4 border-l-4 border-white rounded-tl-lg"></div>
-						<div class="absolute -top-1 -right-1 w-8 h-8 border-t-4 border-r-4 border-white rounded-tr-lg"></div>
-						<div class="absolute -bottom-1 -left-1 w-8 h-8 border-b-4 border-l-4 border-white rounded-bl-lg"></div>
-						<div class="absolute -bottom-1 -right-1 w-8 h-8 border-b-4 border-r-4 border-white rounded-br-lg"></div>
-						
-						<!-- Scan Animation Line -->
-						<div class="absolute inset-x-4 top-0 h-0.5 bg-accent/60 shadow-[0_0_15px_rgba(var(--accent-rgb),0.5)] animate-[scan_2s_ease-in-out_infinite]"></div>
-					</div>
-				</div>
-			</div>
-
-			<div class="flex flex-col items-center gap-4">
-				<div class="flex items-center gap-2 px-4 py-2 bg-white/10 rounded-full border border-white/10">
-					<Camera size={14} class="text-gray-400" />
-					<span class="text-[10px] font-bold text-white uppercase tracking-widest">Camera Active</span>
-				</div>
-				<p class="text-[10px] text-gray-500 font-bold uppercase tracking-widest text-center max-w-[200px]">
-					Position the QR code inside the frame to scan
-				</p>
-			</div>
-		</div>
-	</div>
-{/if}
 
 <style>
 	@keyframes scan {
