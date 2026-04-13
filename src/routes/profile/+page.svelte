@@ -317,8 +317,11 @@
 		</button>
 	</section>
 
-	<footer class="mt-4 mb-8">
-		<p class="text-[10px] text-gray-300 text-center font-bold tracking-widest uppercase">Momotime v1.0.0-PROD</p>
+	<footer class="mt-4 mb-8 flex flex-col gap-2 px-4 text-center">
+		<p class="text-[10px] text-gray-300 font-bold tracking-widest uppercase">Momotime v1.0.0-PROD</p>
+		<p class="text-[8px] text-gray-400 font-medium leading-relaxed">
+			MomoTimeは、Amazon.co.jpを宣伝しリンクすることによって紹介料を獲得できる手段を提供することを目的に設定されたアフィリエイトプログラムである、Amazonアソシエイト・プログラムの参加者です。
+		</p>
 	</footer>
 </div>
 

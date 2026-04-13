@@ -7,7 +7,15 @@
 	import { fade, slide, fly, scale } from 'svelte/transition';
 
 	const days = ['月', '火', '水', '木', '金', '土'];
-	const periods = [1, 2, 3, 4, 5];
+	const periods = [1, 2, 3, 4, 5, 6];
+	const periodTimes: Record<number, { start: string, end: string }> = {
+		1: { start: '09:20', end: '10:50' },
+		2: { start: '11:00', end: '12:30' },
+		3: { start: '13:20', end: '14:50' },
+		4: { start: '15:00', end: '16:30' },
+		5: { start: '16:40', end: '18:10' },
+		6: { start: '18:20', end: '19:50' }
+	};
 
 	// Determine today
 	const now = new Date();
@@ -17,6 +25,7 @@
 
 	let userId = $state<string | null>(null);
 	let userClasses = $state<any[]>([]);
+	let pendingClasses = $state<any[]>([]);
 	let selectedDay = $state(todayIndex);
 	let viewMode = $state<'daily' | 'weekly'>('daily');
 	let isLoading = $state(true);
@@ -29,7 +38,8 @@
 		teacher: '',
 		day_of_week: 0,
 		period: 1,
-		color: '#f3e8ff'
+		color: '#f3e8ff',
+		is_remote: false
 	});
 	async function fetchUserClasses() {
 		isLoading = true;
@@ -63,7 +73,8 @@
 			teacher: '',
 			day_of_week: day,
 			period: period,
-			color: '#f3e8ff'
+			color: '#f3e8ff',
+			is_remote: false
 		};
 		selectedClass = null;
 		isEditMode = true;
@@ -77,7 +88,8 @@
 			teacher: item.Classes.teacher,
 			day_of_week: item.Classes.day_of_week,
 			period: item.Classes.period,
-			color: item.color
+			color: item.color,
+			is_remote: item.Classes.is_remote
 		};
 		isEditMode = true;
 	}
@@ -85,6 +97,29 @@
 	async function saveClass() {
 		if (!editData.name) {
 			toasts.add('授業名を入力してください', 'error');
+			return;
+		}
+
+		// If editing a pending class, update local state only
+		if (selectedClass?.isPending) {
+			const index = pendingClasses.findIndex(c => 
+				c.day_of_week === selectedClass.Classes.day_of_week && 
+				c.period === selectedClass.Classes.period
+			);
+			if (index !== -1) {
+				pendingClasses[index] = {
+					...pendingClasses[index],
+					name: editData.name,
+					room: editData.room,
+					teacher: editData.teacher,
+					day_of_week: Number(editData.day_of_week),
+					period: Number(editData.period),
+					is_remote: editData.is_remote,
+					color: editData.color
+				};
+			}
+			isEditMode = false;
+			selectedClass = null;
 			return;
 		}
 
@@ -99,7 +134,16 @@
 			
 			let classId: string;
 			if (classData) {
-				classId = classData.id;
+				classId = (classData as any).id;
+				// Update existing class with potentially new room/teacher/is_remote
+				const { error: updateError } = await (supabase.from('Classes') as any)
+					.update({
+						room: editData.room,
+						teacher: editData.teacher,
+						is_remote: editData.is_remote
+					})
+					.eq('id', classId);
+				if (updateError) throw updateError;
 			} else {
 				const { data: newClass, error } = await (supabase.from('Classes') as any)
 					.insert({
@@ -107,7 +151,8 @@
 						room: editData.room,
 						teacher: editData.teacher,
 						day_of_week: editData.day_of_week,
-						period: editData.period
+						period: editData.period,
+						is_remote: editData.is_remote
 					})
 					.select()
 					.single();
@@ -138,6 +183,16 @@
 
 	async function deleteClass() {
 		if (!selectedClass) return;
+
+		if (selectedClass.isPending) {
+			pendingClasses = pendingClasses.filter(c => 
+				!(c.day_of_week === selectedClass.Classes.day_of_week && c.period === selectedClass.Classes.period)
+			);
+			selectedClass = null;
+			isEditMode = false;
+			return;
+		}
+
 		if (!confirm('この授業を削除してもよろしいですか？')) return;
 
 		try {
@@ -158,9 +213,90 @@
 	}
 
 	function getClass(dayIndex: number, period: number) {
+		const pending = pendingClasses.find(
+			(c) => c.day_of_week === dayIndex && c.period === period
+		);
+		if (pending) {
+			return {
+				isPending: true,
+				color: pending.color,
+				Classes: {
+					name: pending.name,
+					room: pending.room,
+					teacher: pending.teacher,
+					day_of_week: pending.day_of_week,
+					period: pending.period,
+					is_remote: pending.is_remote
+				}
+			};
+		}
+
 		return userClasses.find(
 			(uc) => uc.Classes.day_of_week === dayIndex && uc.Classes.period === period
 		);
+	}
+
+	function onOCRSuccess(classes: any[]) {
+		pendingClasses = classes;
+	}
+
+	async function savePendingClasses() {
+		if (pendingClasses.length === 0) return;
+		isLoading = true;
+		try {
+			for (const item of pendingClasses) {
+				let { data: classData } = await (supabase.from('Classes') as any)
+					.select('id')
+					.eq('name', item.name)
+					.eq('day_of_week', item.day_of_week)
+					.eq('period', item.period)
+					.maybeSingle();
+				
+				let classId: string;
+				if (classData) {
+					classId = (classData as any).id;
+					await (supabase.from('Classes') as any).update({
+						room: item.room,
+						teacher: item.teacher,
+						is_remote: item.is_remote
+					}).eq('id', classId);
+				} else {
+					const { data: newClass, error } = await (supabase.from('Classes') as any)
+						.insert({
+							name: item.name,
+							room: item.room,
+							teacher: item.teacher,
+							day_of_week: item.day_of_week,
+							period: item.period,
+							is_remote: item.is_remote
+						})
+						.select()
+						.single();
+					if (error) throw error;
+					classId = (newClass as any).id;
+				}
+
+				await (supabase.from('User_Classes') as any)
+					.upsert({
+						user_id: userId,
+						class_id: classId,
+						color: item.color
+					}, { onConflict: 'user_id, class_id' });
+			}
+			toasts.add('すべての授業を保存しました！', 'success');
+			pendingClasses = [];
+			fetchUserClasses();
+		} catch (err) {
+			toasts.add('保存に失敗しました', 'error');
+		} finally {
+			isLoading = false;
+		}
+	}
+
+	function cancelPending() {
+		if (confirm('解析結果を破棄してもよろしいですか？')) {
+			pendingClasses = [];
+		}
 	}
 
 	onMount(() => {
@@ -171,6 +307,33 @@
 <svelte:head>
 	<title>Momotime | 時間割</title>
 </svelte:head>
+
+<!-- Action Bar for Pending OCR Results -->
+{#if pendingClasses.length > 0}
+	<div 
+		class="sticky top-4 z-50 w-full text-white px-6 py-4 rounded-[28px] shadow-2xl flex items-center justify-between mb-4 border border-white/10 backdrop-blur-md bg-black/90"
+		transition:fly={{ y: -20, duration: 400 }}
+	>
+		<div class="flex flex-col">
+			<span class="text-xs font-black uppercase tracking-widest text-accent">Preview Mode</span>
+			<span class="text-[10px] font-bold text-gray-400">{pendingClasses.length}件の解析結果をプレビュー中</span>
+		</div>
+		<div class="flex gap-2">
+			<button 
+				class="px-4 py-2 bg-white text-black rounded-full text-[10px] font-black uppercase transition-all active:scale-95 shadow-lg shadow-white/10"
+				onclick={savePendingClasses}
+			>
+				保存する
+			</button>
+			<button 
+				class="px-4 py-2 bg-white/10 text-white rounded-full text-[10px] font-black uppercase transition-all hover:bg-white/20 active:scale-95"
+				onclick={cancelPending}
+			>
+				キャンセル
+			</button>
+		</div>
+	</div>
+{/if}
 
 <section class="flex flex-col gap-6">
 	<!-- Header -->
@@ -227,22 +390,43 @@
 					{@const item = getClass(selectedDay, period)}
 					<button
 						type="button"
-						class="insta-card p-6 flex justify-between items-center group cursor-pointer w-full text-left"
+						class="insta-card p-6 flex justify-between items-center group cursor-pointer w-full text-left transition-all {item?.isPending ? 'ring-2 ring-accent ring-offset-4 ring-offset-secondary shadow-lg shadow-accent/20' : ''}"
 						onclick={() => item ? openEditModal(item) : openAddModal(selectedDay, period)}
 					>
 						<div class="flex items-center gap-4">
-							<div 
-								class="w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold"
-								style="background-color: {item?.color || '#f1f1f1'}; color: rgba(0,0,0,0.4)"
-							>
-								{period}
+							<div class="flex flex-col items-center">
+								<div 
+									class="w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold shadow-sm"
+									style="background-color: {item?.color || '#f1f1f1'}; color: rgba(0,0,0,0.4)"
+								>
+									{period}
+								</div>
+								<div class="text-[9px] text-gray-500 font-bold mt-1 tracking-tighter">
+									{periodTimes[period].start}
+								</div>
 							</div>
-							<div class="flex flex-col">
+							<div class="flex flex-col gap-0.5">
 								{#if item}
-									<h3 class="font-bold text-base leading-tight">{item.Classes.name}</h3>
-									<p class="text-xs text-gray-400 mt-0.5">{item.Classes.room || '教室未設定'}</p>
+									<div class="flex items-center gap-1.5 flex-wrap">
+										<h3 class="font-bold text-base leading-tight">{item.Classes.name}</h3>
+										{#if item.isPending}
+											<span class="text-[8px] bg-accent text-black px-1.5 py-0.5 rounded-md font-black italic tracking-tighter">NEW</span>
+										{/if}
+										{#if item.Classes.is_remote}
+											<span class="text-[8px] bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded-md font-bold">遠隔</span>
+										{/if}
+									</div>
+									<div class="flex items-center gap-2">
+										<p class="text-xs text-gray-400 font-medium">{item.Classes.teacher || ''}</p>
+										{#if item.Classes.room}
+											<span class="bg-blue-600 text-white text-[10px] px-3 py-1 rounded-full font-bold shadow-sm shadow-blue-200">
+												{item.Classes.room}
+											</span>
+										{/if}
+									</div>
 								{:else}
 									<h3 class="font-bold text-gray-300">No Class</h3>
+									<p class="text-[9px] text-gray-300 font-bold">TAP TO ADD</p>
 								{/if}
 							</div>
 						</div>
@@ -255,8 +439,8 @@
 		</div>
 	{:else}
 		<!-- Weekly Grid View -->
-		<div class="bg-white border border-border rounded-[32px] p-4 pb-6 overflow-x-auto no-scrollbar shadow-sm" in:scale={{ duration: 300, start: 0.95 }}>
-			<div class="grid grid-cols-[30px_repeat(6,1fr)] gap-2 min-w-[500px]">
+		<div class="bg-white border border-border rounded-[24px] p-2 pb-4 shadow-sm" in:scale={{ duration: 300, start: 0.95 }}>
+			<div class="grid grid-cols-[20px_repeat(6,1fr)] gap-1">
 				<!-- Header row -->
 				<div class="h-8"></div>
 				{#each days as day, i}
@@ -269,21 +453,37 @@
 
 				<!-- Period rows -->
 				{#each periods as period}
-					<div class="h-16 flex items-center justify-center text-[10px] font-bold text-gray-300">
-						{period}
+					<div class="h-14 flex flex-col items-center justify-center gap-0.5">
+						<span class="text-[9px] font-black text-gray-500 leading-none">{period}</span>
+						<div class="flex flex-col items-center leading-[1.1]">
+							<span class="text-[8px] font-bold text-gray-500 tracking-tighter">{periodTimes[period].start}</span>
+							<span class="text-[7px] font-bold text-gray-400 tracking-tighter opacity-60">↓</span>
+							<span class="text-[8px] font-bold text-gray-500 tracking-tighter">{periodTimes[period].end}</span>
+						</div>
 					</div>
 					{#each Array(6) as _, dayIdx}
 						{@const item = getClass(dayIdx, period)}
 						<button 
 							type="button"
-							class="h-16 rounded-xl border border-dashed border-gray-100 flex items-center justify-center p-1 transition-all active:scale-95 border-none shadow-sm cursor-pointer {dayIdx === todayIndex ? 'bg-[#E0F2FE] ring-1 ring-blue-100 border-x-blue-200 border-x' : ''}"
-							style="background-color: {item?.color || (dayIdx === todayIndex ? '#E0F2FE' : 'transparent')}"
+							class="h-14 rounded-lg flex items-center justify-center p-0.5 transition-all active:scale-95 border-none shadow-sm cursor-pointer {dayIdx === todayIndex ? 'bg-[#D0EFFF] ring-2 ring-blue-300 ring-inset' : ''} {item?.isPending ? 'ring-2 ring-accent ring-offset-2' : ''}"
+							style="background-color: {item?.color || (dayIdx === todayIndex ? '#D0EFFF' : 'transparent')}"
 							onclick={() => item ? openEditModal(item) : openAddModal(dayIdx, period)}
 						>
 							{#if item}
-								<span class="text-[9px] font-bold leading-none text-center line-clamp-2 px-1 text-black/70 {dayIdx === todayIndex ? 'text-blue-900 saturate-150' : ''}">
-									{item.Classes.name}
-								</span>
+								<div class="flex flex-col items-center justify-center gap-0.5 w-full relative">
+									{#if item.isPending}
+										<div class="absolute -top-1 -right-1 w-1.5 h-1.5 bg-accent rounded-full animate-ping"></div>
+										<div class="absolute -top-1 -right-1 w-1.5 h-1.5 bg-accent rounded-full"></div>
+									{/if}
+									<span class="text-[7px] font-bold leading-none text-center line-clamp-3 px-0.5 text-black/70 {dayIdx === todayIndex ? 'text-blue-900 saturate-150' : ''}">
+										{item.Classes.name}
+									</span>
+									{#if item.Classes.room}
+										<span class="bg-blue-600 text-white text-[7px] px-1.5 py-0.5 rounded-sm font-bold scale-[0.9] origin-center shadow-sm">
+											{item.Classes.room}
+										</span>
+									{/if}
+								</div>
 							{/if}
 						</button>
 					{/each}
@@ -366,6 +566,20 @@
 					</div>
 				</div>
 
+				<div class="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-100">
+					<div class="flex flex-col">
+						<span class="text-sm font-bold text-gray-700">遠隔授業</span>
+						<span class="text-[10px] text-gray-400 font-medium">オンライン講義の場合はオンにします</span>
+					</div>
+					<button 
+						class="w-12 h-6 rounded-full transition-colors relative {editData.is_remote ? 'bg-black' : 'bg-gray-200'}"
+						onclick={() => editData.is_remote = !editData.is_remote}
+						aria-label="遠隔授業切り替え"
+					>
+						<div class="absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform {editData.is_remote ? 'translate-x-6' : ''}"></div>
+					</button>
+				</div>
+
 				<div class="flex flex-col gap-1.5">
 					<label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1" for="color">ラベル色</label>
 					<div class="flex gap-2 flex-wrap">
@@ -396,7 +610,7 @@
 	</div>
 {/if}
 
-<ImageUpload userId={userId ?? ''} onUploadComplete={fetchUserClasses} />
+<ImageUpload userId={userId ?? ''} onUploadComplete={onOCRSuccess} />
 
 <style>
 	:global(.bg-secondary) {

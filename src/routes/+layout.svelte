@@ -12,6 +12,7 @@
 		Users, 
 		User 
 	} from 'lucide-svelte';
+	import PromoBanner from '$lib/components/PromoBanner.svelte';
 
 	let { children } = $props();
 	let session = $state<any>(null);
@@ -56,7 +57,7 @@
 	];
 </script>
 
-<div class="min-h-screen bg-secondary pb-16">
+<div class="min-h-screen bg-secondary pb-36">
 	<ToastContainer />
 	
 	{#if isInitialized}
@@ -71,6 +72,12 @@
 		{/key}
 
 		{#if page.url.pathname !== '/login'}
+			<div class="fixed bottom-[74px] left-0 right-0 px-4 z-40">
+				<div class="max-w-xl mx-auto">
+					<PromoBanner />
+				</div>
+			</div>
+
 			<nav class="nav-bottom">
 				{#each navItems as item}
 					<a 

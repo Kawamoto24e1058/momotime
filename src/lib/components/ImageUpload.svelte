@@ -4,7 +4,7 @@
 	import { fade, slide } from 'svelte/transition';
 
 	let { onUploadComplete, userId } = $props<{ 
-		onUploadComplete: () => void;
+		onUploadComplete: (classes: any[]) => void;
 		userId: string;
 	}>();
 
@@ -42,12 +42,8 @@
 
 			const result = await response.json();
 			if (result.success) {
-				let msg = `同期完了：${result.total}件の授業を認識しました。`;
-				if (result.added > 0 || result.removed > 0) {
-					msg += `（追加: ${result.added}, 削除: ${result.removed}）`;
-				}
-				toasts.add(msg, 'success');
-				onUploadComplete();
+				toasts.add(`AIが${result.classes.length}件の授業を認識しました。配置を確認して[保存する]を押してください。`, 'success');
+				onUploadComplete(result.classes);
 			} else {
 				throw new Error(result.error || '不明なエラーが発生しました');
 			}
@@ -66,8 +62,8 @@
 				const img = new Image();
 				img.onload = () => {
 					const canvas = document.createElement('canvas');
-					const MAX_WIDTH = 1200;
-					const MAX_HEIGHT = 1200;
+					const MAX_WIDTH = 1000;
+					const MAX_HEIGHT = 1000;
 					let width = img.width;
 					let height = img.height;
 
