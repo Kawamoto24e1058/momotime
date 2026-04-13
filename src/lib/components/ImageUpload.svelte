@@ -3,12 +3,12 @@
 	import { toasts } from '$lib/stores/toasts';
 	import { fade, slide } from 'svelte/transition';
 
-	let { onUploadComplete, userId } = $props<{ 
+	let { onUploadComplete, userId, isOpen = $bindable(false) } = $props<{ 
 		onUploadComplete: (classes: any[]) => void;
 		userId: string;
+		isOpen?: boolean;
 	}>();
 
-	let isOpen = $state(false);
 	let isProcessing = $state(false);
 	let fileInput: HTMLInputElement;
 	let cameraInput: HTMLInputElement;
@@ -94,14 +94,6 @@
 	}
 </script>
 
-<!-- Floating Action Button -->
-<button
-	class="fixed right-6 bottom-24 w-14 h-14 bg-black text-white rounded-full shadow-lg flex items-center justify-center transition-transform hover:scale-110 active:scale-95 z-40"
-	onclick={() => (isOpen = true)}
-	aria-label="Add timetable"
->
-	<Plus size={28} />
-</button>
 
 <!-- Overlay / Modal -->
 {#if isOpen}

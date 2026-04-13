@@ -57,7 +57,7 @@
 	];
 </script>
 
-<div class="min-h-screen bg-secondary pb-36">
+<div class="min-h-screen bg-secondary pb-48">
 	<ToastContainer />
 	
 	{#if isInitialized}

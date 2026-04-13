@@ -31,6 +31,7 @@
 	let isLoading = $state(true);
 	let selectedClass = $state<any | null>(null);
 	let isEditMode = $state(false);
+	let isImageUploadOpen = $state(false);
 	const inputClass = 'w-full bg-gray-50 border border-border rounded-2xl py-3 px-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-black/5 transition-all';
 	let editData = $state({
 		name: '',
@@ -350,6 +351,13 @@
 		<div class="flex gap-2">
 			<button 
 				class="p-2.5 rounded-2xl bg-white border border-border shadow-sm hover:bg-gray-50 transition-colors"
+				onclick={() => isImageUploadOpen = true}
+				aria-label="Add class"
+			>
+				<Plus size={20} class="text-black" />
+			</button>
+			<button 
+				class="p-2.5 rounded-2xl bg-white border border-border shadow-sm hover:bg-gray-50 transition-colors"
 				onclick={() => viewMode = viewMode === 'daily' ? 'weekly' : 'daily'}
 				aria-label="Toggle view"
 			>
@@ -610,7 +618,7 @@
 	</div>
 {/if}
 
-<ImageUpload userId={userId ?? ''} onUploadComplete={onOCRSuccess} />
+<ImageUpload userId={userId ?? ''} onUploadComplete={onOCRSuccess} bind:isOpen={isImageUploadOpen} />
 
 <style>
 	:global(.bg-secondary) {
