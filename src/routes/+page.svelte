@@ -3,6 +3,7 @@
 	import { Plus, Bell, MoreHorizontal, Calendar, Info, MapPin, User, ChevronLeft, ChevronRight } from 'lucide-svelte';
 	import { supabase } from '$lib/supabaseClient';
 	import ImageUpload from '$lib/components/ImageUpload.svelte';
+	import TransportTimer from '$lib/components/TransportTimer.svelte';
 	import { toasts } from '$lib/stores/toasts';
 	import { fade, slide, fly, scale } from 'svelte/transition';
 
@@ -368,6 +369,8 @@
 			</button>
 		</div>
 	</header>
+
+	<TransportTimer />
 
 	{#if viewMode === 'daily'}
 		<!-- Day Selector -->
