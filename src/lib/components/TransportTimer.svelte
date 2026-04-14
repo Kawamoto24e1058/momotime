@@ -3,74 +3,78 @@
 	import { Bus } from 'lucide-svelte';
 	import { BUS_SCHEDULE_WEEKDAY, BUS_SCHEDULE_HOLIDAY, HOLIDAYS_2026 } from '$lib/constants';
 
+	// 1. Initialize variables with safe defaults (SSR-safe)
 	let nextBusTime = $state<Date | null>(null);
 	let timeRemaining = $state('--:--');
 	let isUrgent = $state(false);
-	let scheduleType = $state<'平日' | '休日'>('平日');
+	let scheduleType = $state<string>('');
 	let interval: any;
 
-	function getActiveScheduleInfo() {
-		const now = new Date();
-		const year = now.getFullYear();
-		const month = String(now.getMonth() + 1).padStart(2, '0');
-		const day = String(now.getDate()).padStart(2, '0');
-		const dateStr = `${year}-${month}-${day}`;
-		const dayOfWeek = now.getDay();
-		
-		const isHoliday = HOLIDAYS_2026.includes(dateStr) || dayOfWeek === 0 || dayOfWeek === 6;
-		return {
-			type: isHoliday ? '休日' : '平日' as '平日' | '休日',
-			schedule: isHoliday ? BUS_SCHEDULE_HOLIDAY : BUS_SCHEDULE_WEEKDAY
-		};
-	}
+	onMount(() => {
+		// 2. Move all calculation logic into onMount to prevent SSR execution
+		function getActiveScheduleInfo() {
+			const now = new Date();
+			const year = now.getFullYear();
+			const month = String(now.getMonth() + 1).padStart(2, '0');
+			const day = String(now.getDate()).padStart(2, '0');
+			const dateStr = `${year}-${month}-${day}`;
+			const dayOfWeek = now.getDay();
+			
+			const isHoliday = HOLIDAYS_2026.includes(dateStr) || dayOfWeek === 0 || dayOfWeek === 6;
+			return {
+				type: isHoliday ? '休日' : '平日',
+				schedule: isHoliday ? BUS_SCHEDULE_HOLIDAY : BUS_SCHEDULE_WEEKDAY
+			};
+		}
 
-	function findNextBus() {
-		const now = new Date();
-		const info = getActiveScheduleInfo();
-		scheduleType = info.type;
-		
-		for (const timeStr of info.schedule) {
-			const [hours, minutes] = timeStr.split(':').map(Number);
-			const busTime = new Date();
-			busTime.setHours(hours, minutes, 0, 0);
+		function findNextBus() {
+			const now = new Date();
+			const info = getActiveScheduleInfo();
+			scheduleType = info.type;
+			
+			for (const timeStr of info.schedule) {
+				const [hours, minutes] = timeStr.split(':').map(Number);
+				const busTime = new Date();
+				busTime.setHours(hours, minutes, 0, 0);
 
-			if (busTime > now) {
-				return busTime;
+				if (busTime > now) {
+					return busTime;
+				}
+			}
+			return null;
+		}
+
+		function updateCountdown() {
+			const now = new Date();
+			
+			// Refresh next bus if current one passed or not set
+			if (!nextBusTime || nextBusTime <= now) {
+				nextBusTime = findNextBus();
+			}
+
+			if (nextBusTime) {
+				const diffMs = nextBusTime.getTime() - now.getTime();
+				const diffSecs = Math.max(0, Math.floor(diffMs / 1000));
+				
+				const mins = Math.floor(diffSecs / 60);
+				const secs = diffSecs % 60;
+				
+				timeRemaining = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+				isUrgent = diffSecs < 180; // Red if less than 3 minutes
+			} else {
+				timeRemaining = '本日の運行は終了しました';
+				isUrgent = false;
 			}
 		}
-		return null;
-	}
 
-	function updateCountdown() {
-		const now = new Date();
-		
-		// Refresh next bus if current one passed or not set
-		if (!nextBusTime || nextBusTime <= now) {
-			nextBusTime = findNextBus();
-		}
-
-		if (nextBusTime) {
-			const diffMs = nextBusTime.getTime() - now.getTime();
-			const diffSecs = Math.max(0, Math.floor(diffMs / 1000));
-			
-			const mins = Math.floor(diffSecs / 60);
-			const secs = diffSecs % 60;
-			
-			timeRemaining = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-			isUrgent = diffSecs < 180; // Red if less than 3 minutes
-		} else {
-			timeRemaining = '本日の運行は終了しました';
-			isUrgent = false;
-		}
-	}
-
-	onMount(() => {
+		// Initial update and start timer
 		updateCountdown();
 		interval = setInterval(updateCountdown, 1000);
-	});
 
-	onDestroy(() => {
-		if (interval) clearInterval(interval);
+		// 3. Prevent memory leaks with cleanup function
+		return () => {
+			if (interval) clearInterval(interval);
+		};
 	});
 </script>
 
@@ -82,9 +86,11 @@
 		<div class="flex flex-col">
 			<div class="flex items-center gap-2 mb-1">
 				<span class="text-[10px] font-black text-blue-400 uppercase tracking-widest leading-none">Bus Departure</span>
-				<span class="px-1.5 py-0.5 rounded-md text-[8px] font-bold {scheduleType === '平日' ? 'bg-blue-100 text-blue-600' : 'bg-rose-100 text-rose-600'}">
-					{scheduleType}ダイヤ
-				</span>
+				{#if scheduleType}
+					<span class="px-1.5 py-0.5 rounded-md text-[8px] font-bold {scheduleType === '平日' ? 'bg-blue-100 text-blue-600' : 'bg-rose-100 text-rose-600'}">
+						{scheduleType}ダイヤ
+					</span>
+				{/if}
 			</div>
 			<h3 class="text-sm font-bold text-gray-800 tracking-tight leading-none">和泉中央駅行き 次のバス</h3>
 		</div>

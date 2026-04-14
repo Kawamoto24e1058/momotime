@@ -33,6 +33,13 @@
 	let selectedClass = $state<any | null>(null);
 	let isEditMode = $state(false);
 	let isImageUploadOpen = $state(false);
+	
+	// Drag & Drop State
+	let dragSource = $state<{ day: number, period: number, item: any } | null>(null);
+	let dropTarget = $state<{ day: number, period: number } | null>(null);
+	let dragTimer: any;
+	let isDragging = $state(false);
+
 	const inputClass = 'w-full bg-gray-50 border border-border rounded-2xl py-3 px-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-black/5 transition-all';
 	let editData = $state({
 		name: '',
@@ -301,6 +308,106 @@
 		}
 	}
 
+	// --- Drag & Drop Handlers ---
+	function onPointerDown(e: PointerEvent, day: number, period: number) {
+		const item = getClass(day, period);
+		if (!item) return;
+
+		// Start long press timer
+		dragTimer = setTimeout(() => {
+			dragSource = { day, period, item };
+			isDragging = true;
+			// Vibrate if supported
+			if (navigator.vibrate) navigator.vibrate(50);
+		}, 500);
+	}
+
+	function onPointerMove(e: PointerEvent, day: number, period: number) {
+		if (!isDragging) return;
+		
+		// If we are over a different slot, mark it as drop target
+		if (!dropTarget || dropTarget.day !== day || dropTarget.period !== period) {
+			dropTarget = { day, period };
+		}
+	}
+
+	function onPointerUp(e: PointerEvent) {
+		clearTimeout(dragTimer);
+		if (!isDragging) return;
+
+		if (dragSource && dropTarget && (dragSource.day !== dropTarget.day || dragSource.period !== dropTarget.period)) {
+			handleSwap(dragSource, dropTarget);
+		}
+
+		// Reset state
+		isDragging = false;
+		dragSource = null;
+		dropTarget = null;
+	}
+
+	function onPointerCancel() {
+		clearTimeout(dragTimer);
+		isDragging = false;
+		dragSource = null;
+		dropTarget = null;
+	}
+
+	async function handleSwap(from: any, to: any) {
+		const item1 = from.item;
+		const item2 = getClass(to.day, to.period);
+
+		// 1. Handle Pending Classes (Local Swap)
+		if (item1.isPending || item2?.isPending) {
+			// Update pendingClasses array
+			const newPending = [...pendingClasses];
+			
+			if (item1.isPending) {
+				const idx1 = newPending.findIndex(c => c.day_of_week === from.day && c.period === from.period);
+				if (idx1 !== -1) {
+					newPending[idx1] = { ...newPending[idx1], day_of_week: to.day, period: to.period };
+				}
+			}
+			
+			if (item2?.isPending) {
+				const idx2 = newPending.findIndex(c => c.day_of_week === to.day && c.period === to.period);
+				if (idx2 !== -1) {
+					newPending[idx2] = { ...newPending[idx2], day_of_week: from.day, period: from.period };
+				}
+			}
+			
+			// If swapping pending with persisted, it's more complex. 
+			// For now, let's treat moved persisted classes as "pending" if they are part of a swap with pending.
+			// However, to keep it simple, we only support full move/swap if both are in same mode or target is empty.
+			
+			pendingClasses = newPending;
+			toasts.add('配置を変更しました（プレビュー）', 'info');
+		} 
+		// 2. Handle Persisted Classes (DB Update)
+		else {
+			try {
+				isLoading = true;
+				// Update Class A to New Slot
+				await (supabase.from('Classes') as any).update({
+					day_of_week: to.day,
+					period: to.period
+				}).eq('id', item1.Classes.id);
+
+				// If there was a Class B, move it to Class A's old slot
+				if (item2) {
+					await (supabase.from('Classes') as any).update({
+						day_of_week: from.day,
+						period: from.period
+					}).eq('id', item2.Classes.id);
+				}
+
+				toasts.add('配置を更新しました', 'success');
+				fetchUserClasses();
+			} catch (err) {
+				toasts.add('移動に失敗しました', 'error');
+			}
+		}
+	}
+
 	onMount(() => {
 		fetchUserClasses();
 	});
@@ -399,10 +506,20 @@
 			{:else}
 				{#each periods as period}
 					{@const item = getClass(selectedDay, period)}
+					{@const isBeingDragged = isDragging && dragSource?.day === selectedDay && dragSource?.period === period}
+					{@const isDropTarget = isDragging && dropTarget?.day === selectedDay && dropTarget?.period === period}
+					
 					<button
 						type="button"
-						class="insta-card p-6 flex justify-between items-center group cursor-pointer w-full text-left transition-all {item?.isPending ? 'ring-2 ring-accent ring-offset-4 ring-offset-secondary shadow-lg shadow-accent/20' : ''}"
+						class="insta-card p-6 flex justify-between items-center group cursor-pointer w-full text-left transition-all 
+							{item?.isPending ? 'ring-2 ring-accent ring-offset-4 ring-offset-secondary shadow-lg shadow-accent/20' : ''} 
+							{isBeingDragged ? 'scale-105 rotate-1 opacity-50 shadow-2xl z-50 pointer-events-none' : ''}
+							{isDropTarget ? 'bg-accent/10 border-accent ring-2 ring-accent' : ''}"
 						onclick={() => item ? openEditModal(item) : openAddModal(selectedDay, period)}
+						onpointerdown={(e) => onPointerDown(e, selectedDay, period)}
+						onpointerenter={(e) => onPointerMove(e, selectedDay, period)}
+						onpointerup={onPointerUp}
+						onpointercancel={onPointerCancel}
 					>
 						<div class="flex items-center gap-4">
 							<div class="flex flex-col items-center">
@@ -474,11 +591,22 @@
 					</div>
 					{#each Array(6) as _, dayIdx}
 						{@const item = getClass(dayIdx, period)}
+						{@const isBeingDragged = isDragging && dragSource?.day === dayIdx && dragSource?.period === period}
+						{@const isDropTarget = isDragging && dropTarget?.day === dayIdx && dropTarget?.period === period}
+						
 						<button 
 							type="button"
-							class="h-14 rounded-lg flex items-center justify-center p-0.5 transition-all active:scale-95 border-none shadow-sm cursor-pointer {dayIdx === todayIndex ? 'bg-[#D0EFFF] ring-2 ring-blue-300 ring-inset' : ''} {item?.isPending ? 'ring-2 ring-accent ring-offset-2' : ''}"
-							style="background-color: {item?.color || (dayIdx === todayIndex ? '#D0EFFF' : 'transparent')}"
+							class="h-14 rounded-lg flex items-center justify-center p-0.5 transition-all active:scale-95 border-none shadow-sm cursor-pointer 
+								{dayIdx === todayIndex ? 'bg-[#D0EFFF] ring-2 ring-blue-300 ring-inset' : ''} 
+								{item?.isPending ? 'ring-2 ring-accent ring-offset-2' : ''}
+								{isBeingDragged ? 'scale-110 opacity-50 shadow-xl z-50 pointer-events-none' : ''}
+								{isDropTarget ? 'bg-accent/20 ring-2 ring-accent' : ''}"
+							style="background-color: {isDropTarget ? '' : (item?.color || (dayIdx === todayIndex ? '#D0EFFF' : 'transparent'))}"
 							onclick={() => item ? openEditModal(item) : openAddModal(dayIdx, period)}
+							onpointerdown={(e) => onPointerDown(e, dayIdx, period)}
+							onpointerenter={(e) => onPointerMove(e, dayIdx, period)}
+							onpointerup={onPointerUp}
+							onpointercancel={onPointerCancel}
 						>
 							{#if item}
 								<div class="flex flex-col items-center justify-center gap-0.5 w-full relative">
@@ -633,5 +761,8 @@
 	.no-scrollbar {
 		-ms-overflow-style: none;
 		scrollbar-width: none;
+	}
+	button {
+		touch-action: none;
 	}
 </style>
