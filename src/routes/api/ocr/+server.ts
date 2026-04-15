@@ -3,6 +3,10 @@ import type { RequestHandler } from './$types';
 import { extractTimetableFromImages } from '$lib/gemini';
 import { supabase } from '$lib/supabaseClient';
 
+export const config = {
+	runtime: 'edge'
+};
+
 export const POST: RequestHandler = async ({ request, locals }) => {
 	try {
 		const { images, userId } = await request.json();
@@ -14,13 +18,15 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		// 1. Extract data with fallback logic
 		let extractedClasses;
 		try {
-			// Primary: Gemini 3 Flash
-			extractedClasses = await extractTimetableFromImages(images, 'gemini-3-flash');
+			// Primary: Gemini 3 Flash Preview
+			extractedClasses = await extractTimetableFromImages(images, 'gemini-3-flash-preview');
+			console.log("✅ OCR success using primary model (gemini-3-flash-preview)");
 		} catch (primaryError) {
-			console.warn("⚠️ Primary model (gemini-3-flash) failed, attempting fallback to gemini-2.5-flash...");
+			console.warn("⚠️ Primary model (gemini-3-flash-preview) failed, attempting fallback to gemini-3.1-flash-lite-preview...");
 			try {
-				// Fallback: Gemini 2.5 Flash
-				extractedClasses = await extractTimetableFromImages(images, 'gemini-2.5-flash');
+				// Fallback: Gemini 3.1 Flash Lite Preview
+				extractedClasses = await extractTimetableFromImages(images, 'gemini-3.1-flash-lite-preview');
+				console.log("✅ OCR success using fallback model (gemini-3.1-flash-lite-preview)");
 			} catch (fallbackError) {
 				console.error("🚨 All Gemini models failed:", fallbackError);
 				return json({ 
