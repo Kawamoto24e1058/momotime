@@ -11,8 +11,23 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			return json({ error: 'Missing required fields' }, { status: 400 });
 		}
 
-		// 1. Extract data from all images in a single call
-		const extractedClasses = await extractTimetableFromImages(images);
+		// 1. Extract data with fallback logic
+		let extractedClasses;
+		try {
+			// Primary: Gemini 3 Flash
+			extractedClasses = await extractTimetableFromImages(images, 'gemini-3-flash');
+		} catch (primaryError) {
+			console.warn("⚠️ Primary model (gemini-3-flash) failed, attempting fallback to gemini-2.5-flash...");
+			try {
+				// Fallback: Gemini 2.5 Flash
+				extractedClasses = await extractTimetableFromImages(images, 'gemini-2.5-flash');
+			} catch (fallbackError) {
+				console.error("🚨 All Gemini models failed:", fallbackError);
+				return json({ 
+					error: '現在AIサーバーが非常に混み合っています。少し時間をおいてから再度お試しください。' 
+				}, { status: 503 });
+			}
+		}
 
 		// 2. Map results to frontend expected structure
 		const dayMap: Record<string, number> = { '月': 0, '火': 1, '水': 2, '木': 3, '金': 4, '土': 5, '日': 6 };

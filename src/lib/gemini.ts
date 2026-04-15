@@ -3,9 +3,9 @@ import { GEMINI_API_KEY } from '$env/static/private';
 
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
-export async function extractTimetableFromImages(images: { image: string, mimeType: string }[]) {
+export async function extractTimetableFromImages(images: { image: string, mimeType: string }[], modelName = 'gemini-3-flash') {
 	const model = genAI.getGenerativeModel({ 
-		model: 'gemini-2.5-flash',
+		model: modelName,
 		generationConfig: { responseMimeType: 'application/json' }
 	});
 
