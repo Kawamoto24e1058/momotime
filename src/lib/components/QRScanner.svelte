@@ -1,48 +1,77 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { Html5QrcodeScanner } from 'html5-qrcode';
-	import { Camera, ScanLine } from 'lucide-svelte';
+	import { Html5Qrcode } from 'html5-qrcode';
+	import { Camera, ScanLine, AlertCircle } from 'lucide-svelte';
 
 	let { onScanSuccess } = $props<{
 		onScanSuccess: (decodedText: string) => void;
 	}>();
 
-	let scanner: Html5QrcodeScanner | null = null;
+	let scanner: Html5Qrcode | null = null;
 	let isCameraActive = $state(false);
+	let errorMessage = $state<string | null>(null);
 
-	function startCamera() {
+	async function startCamera() {
+		errorMessage = null;
 		isCameraActive = true;
-		// Initialize the scanner after the DOM updates to show the #reader element
-		setTimeout(() => {
-			scanner = new Html5QrcodeScanner(
-				"qr-reader",
-				{ 
+		
+		// Wait for DOM to update and #qr-reader to be present
+		setTimeout(async () => {
+			try {
+				scanner = new Html5Qrcode("qr-reader");
+				
+				const config = { 
 					fps: 10, 
 					qrbox: { width: 250, height: 250 },
 					aspectRatio: 1.0,
-					showTorchButtonIfSupported: true
-				},
-				/* verbose= */ false
-			);
-			
-			scanner.render(
-				(decodedText) => {
-					// Add a slight delay or just call immediately
+				};
+
+				const onSuccess = (decodedText: string) => {
 					onScanSuccess(decodedText);
-				}, 
-				(error) => {
-					// Quietly ignore errors (scanning is an iterative process)
+				};
+
+				const onFailure = (errorMessage: string) => {
+					// Quietly ignore scan errors
+				};
+
+				try {
+					// Try exact environment camera first (typically back camera)
+					await scanner.start(
+						{ facingMode: { exact: "environment" } },
+						config,
+						onSuccess,
+						onFailure
+					);
+				} catch (err) {
+					console.warn("Exact environment camera failed, trying fallback", err);
+					// Fallback if exact match fails
+					await scanner.start(
+						{ facingMode: "environment" },
+						config,
+						onSuccess,
+						onFailure
+					);
 				}
-			);
-		}, 50);
+			} catch (err: any) {
+				console.error("Camera start failed", err);
+				isCameraActive = false;
+				if (err.includes("NotAllowedError") || err.toLowerCase().includes("permission")) {
+					errorMessage = "カメラへのアクセスが拒否されました。ブラウザの設定から許可してください。";
+				} else {
+					errorMessage = `カメラの起動に失敗しました: ${err}`;
+				}
+			}
+		}, 100);
 	}
 
-	function stopCamera() {
+	async function stopCamera() {
 		if (scanner) {
 			try {
-				scanner.clear();
+				if (scanner.isScanning) {
+					await scanner.stop();
+				}
 			} catch (e) {
-				console.error("Error clearing scanner", e);
+				console.error("Error stopping scanner", e);
 			}
 			scanner = null;
 		}
@@ -65,6 +94,21 @@
 		</p>
 	</div>
 
+	{#if errorMessage}
+		<div class="w-full mb-6 p-4 bg-red-50 border border-red-100 rounded-2xl flex items-start gap-3 animate-in fade-in slide-in-from-top-2">
+			<AlertCircle size={20} class="text-red-500 shrink-0 mt-0.5" />
+			<div class="flex flex-col gap-1">
+				<p class="text-xs font-bold text-red-600 leading-tight">{errorMessage}</p>
+				<button 
+					class="text-[10px] font-black uppercase tracking-wider text-red-400 hover:text-red-500 text-left mt-1"
+					onclick={() => errorMessage = null}
+				>
+					閉じる
+				</button>
+			</div>
+		</div>
+	{/if}
+
 	{#if !isCameraActive}
 		<div class="w-full aspect-square bg-gray-50 rounded-[40px] border-2 border-dashed border-gray-200 flex flex-col items-center justify-center gap-6 p-8">
 			<div class="w-20 h-20 rounded-full bg-white shadow-sm flex items-center justify-center text-gray-400">
@@ -82,8 +126,8 @@
 			</p>
 		</div>
 	{:else}
-		<div class="relative w-full overflow-hidden rounded-[40px] bg-black shadow-inner">
-			<div id="qr-reader" class="w-full"></div>
+		<div class="relative w-full overflow-hidden rounded-[40px] bg-black shadow-inner aspect-square">
+			<div id="qr-reader" class="w-full h-full"></div>
 			
 			<!-- Scanner Decorative Frame -->
 			<div class="absolute inset-0 border-[24px] border-black/30 pointer-events-none flex items-center justify-center z-10">
@@ -117,15 +161,9 @@
 	}
 	
 	:global(#qr-reader video) {
+		width: 100% !important;
+		height: 100% !important;
 		object-fit: cover !important;
 		border-radius: 40px !important;
-	}
-	
-	:global(#qr-reader__dashboard) {
-		display: none !important;
-	}
-	
-	:global(#qr-reader__header_message) {
-		display: none !important;
 	}
 </style>

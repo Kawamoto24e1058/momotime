@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, flushSync } from 'svelte';
-	import { Plus, Bell, MoreHorizontal, Calendar, Info, MapPin, User, ChevronLeft, ChevronRight } from 'lucide-svelte';
+	import { Plus, Bell, MoreHorizontal, Calendar, Info, MapPin, User, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-svelte';
 	import { supabase } from '$lib/supabaseClient';
 	import ImageUpload from '$lib/components/ImageUpload.svelte';
 	import TransportTimer from '$lib/components/TransportTimer.svelte';
@@ -145,7 +145,7 @@
 			if (classData) {
 				classId = (classData as any).id;
 				// Update existing class with potentially new room/teacher/is_remote
-				const { error: updateError } = await (supabase.from('Classes') as any)
+				const { data: _, error: updateError } = await (supabase.from('Classes') as any)
 					.update({
 						room: editData.room,
 						teacher: editData.teacher,
@@ -308,6 +308,36 @@
 		}
 	}
 
+	// --- Swipe Handlers ---
+	let touchStartX = 0;
+	let touchStartY = 0;
+
+	function handleTouchStart(e: TouchEvent) {
+		if (isDragging) return; // Don't swipe while dragging
+		touchStartX = e.touches[0].clientX;
+		touchStartY = e.touches[0].clientY;
+	}
+
+	function handleTouchEnd(e: TouchEvent) {
+		if (isDragging) return;
+		const touchEndX = e.changedTouches[0].clientX;
+		const touchEndY = e.changedTouches[0].clientY;
+		
+		const deltaX = touchEndX - touchStartX;
+		const deltaY = touchEndY - touchStartY;
+
+		// Horizontal swipe threshold
+		if (Math.abs(deltaX) > 50 && Math.abs(deltaY) < 50) {
+			if (deltaX > 0) {
+				// Swipe Right -> Previous Day
+				selectedDay = (selectedDay - 1 + 6) % 6;
+			} else {
+				// Swipe Left -> Next Day
+				selectedDay = (selectedDay + 1) % 6;
+			}
+		}
+	}
+
 	// --- Drag & Drop Handlers ---
 	function onPointerDown(e: PointerEvent, day: number, period: number) {
 		const item = getClass(day, period);
@@ -322,12 +352,22 @@
 		}, 500);
 	}
 
-	function onPointerMove(e: PointerEvent, day: number, period: number) {
+	function handleGlobalPointerMove(e: PointerEvent) {
 		if (!isDragging) return;
 		
-		// If we are over a different slot, mark it as drop target
-		if (!dropTarget || dropTarget.day !== day || dropTarget.period !== period) {
-			dropTarget = { day, period };
+		// Find element under the pointer
+		const el = document.elementFromPoint(e.clientX, e.clientY);
+		const dropZone = el?.closest('[data-drop-zone]');
+		
+		if (dropZone) {
+			const day = parseInt(dropZone.getAttribute('data-day') || '-1');
+			const period = parseInt(dropZone.getAttribute('data-period') || '-1');
+			
+			if (day !== -1 && period !== -1) {
+				if (!dropTarget || dropTarget.day !== day || dropTarget.period !== period) {
+					dropTarget = { day, period };
+				}
+			}
 		}
 	}
 
@@ -444,7 +484,17 @@
 	</div>
 {/if}
 
-<section class="flex flex-col gap-6">
+<svelte:window 
+	onpointermove={handleGlobalPointerMove}
+	onpointerup={onPointerUp}
+/>
+
+<section 
+	class="flex flex-col gap-6"
+	role="main"
+	ontouchstart={handleTouchStart}
+	ontouchend={handleTouchEnd}
+>
 	<!-- Header -->
 	<header class="flex items-center justify-between">
 		<div class="flex flex-col gap-0.5">
@@ -455,6 +505,16 @@
 				</button>
 			</div>
 			<p class="text-gray-400 text-[10px] font-bold uppercase tracking-wider">{todayStr}</p>
+			
+			<a 
+				href="https://m-port.andrew.ac.jp/portal/#" 
+				target="_blank" 
+				rel="noopener noreferrer"
+				class="mt-3 w-fit bg-white border border-gray-200 text-sm font-bold text-gray-700 px-4 py-2 rounded-full shadow-sm flex items-center gap-2 hover:bg-gray-50 active:scale-95 transition-all"
+			>
+				M-portを開く
+				<ExternalLink size={14} class="text-gray-400" />
+			</a>
 		</div>
 		<div class="flex gap-2">
 			<button 
@@ -514,10 +574,12 @@
 						class="insta-card p-6 flex justify-between items-center group cursor-pointer w-full text-left transition-all 
 							{item?.isPending ? 'ring-2 ring-accent ring-offset-4 ring-offset-secondary shadow-lg shadow-accent/20' : ''} 
 							{isBeingDragged ? 'scale-105 rotate-1 opacity-50 shadow-2xl z-50 pointer-events-none' : ''}
-							{isDropTarget ? 'bg-accent/10 border-accent ring-2 ring-accent' : ''}"
+							{isDropTarget ? 'bg-accent/10 border-accent ring-2 ring-accent scale-[1.02]' : ''}"
+						data-drop-zone
+						data-day={selectedDay}
+						data-period={period}
 						onclick={() => item ? openEditModal(item) : openAddModal(selectedDay, period)}
 						onpointerdown={(e) => onPointerDown(e, selectedDay, period)}
-						onpointerenter={(e) => onPointerMove(e, selectedDay, period)}
 						onpointerup={onPointerUp}
 						onpointercancel={onPointerCancel}
 					>
@@ -600,11 +662,13 @@
 								{dayIdx === todayIndex ? 'bg-[#D0EFFF] ring-2 ring-blue-300 ring-inset' : ''} 
 								{item?.isPending ? 'ring-2 ring-accent ring-offset-2' : ''}
 								{isBeingDragged ? 'scale-110 opacity-50 shadow-xl z-50 pointer-events-none' : ''}
-								{isDropTarget ? 'bg-accent/20 ring-2 ring-accent' : ''}"
+								{isDropTarget ? 'bg-accent/20 ring-2 ring-accent scale-110' : ''}"
 							style="background-color: {isDropTarget ? '' : (item?.color || (dayIdx === todayIndex ? '#D0EFFF' : 'transparent'))}"
+							data-drop-zone
+							data-day={dayIdx}
+							data-period={period}
 							onclick={() => item ? openEditModal(item) : openAddModal(dayIdx, period)}
 							onpointerdown={(e) => onPointerDown(e, dayIdx, period)}
-							onpointerenter={(e) => onPointerMove(e, dayIdx, period)}
 							onpointerup={onPointerUp}
 							onpointercancel={onPointerCancel}
 						>
@@ -764,5 +828,7 @@
 	}
 	button {
 		touch-action: none;
+		user-select: none;
+		-webkit-touch-callout: none;
 	}
 </style>
