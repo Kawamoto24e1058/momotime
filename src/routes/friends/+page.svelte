@@ -19,6 +19,8 @@
 	import { toasts } from '$lib/stores/toasts';
 	import MyQR from '$lib/components/MyQR.svelte';
 	import QRScanner from '$lib/components/QRScanner.svelte';
+	import NotificationBell from '$lib/components/NotificationBell.svelte';
+	import { getCurrentAcademicSlot } from '$lib/constants';
 
 	let userId = $state<string | null>(null);
 	let friends = $state<any[]>([]);
@@ -28,6 +30,15 @@
 	let isLoading = $state(true);
 	let currentUserProfile = $state<any>(null); // Store current user for handle_id
 	let activeTab = $state<'list' | 'myqr' | 'scan'>('list');
+	let currentSlot = $state(getCurrentAcademicSlot());
+
+	// Update current slot every minute
+	onMount(() => {
+		const interval = setInterval(() => {
+			currentSlot = getCurrentAcademicSlot();
+		}, 60000);
+		return () => clearInterval(interval);
+	});
 
 	async function fetchData() {
 		isLoading = true;
@@ -47,13 +58,25 @@
 				.from('Follows')
 				.select(`
 					followed_id,
-					Users:followed_id (*)
+					Users:followed_id (
+						*,
+						User_Classes (
+							id,
+							color,
+							Classes (
+								name,
+								room,
+								day_of_week,
+								period
+							)
+						)
+					)
 				`)
 				.eq('follower_id', userId);
 
 			if (followsError) throw followsError;
 			friends = (followsData || []).map((f: any) => f.Users).filter(Boolean);
-			freeFriends = friends.slice(0, 3); 
+			freeFriends = friends.filter(f => !getFriendStatus(f).isClass).slice(0, 3); 
 		} catch (error: any) {
 			toasts.add('データの取得に失敗しました', 'error');
 		} finally {
@@ -80,12 +103,50 @@
 				} as any);
 
 			if (error) throw error;
+			
+			// 2. Create Notification for the followed user
+			if (currentUserProfile) {
+				await supabase
+					.from('Notifications')
+					.insert({
+						user_id: targetId,
+						type: 'follow',
+						from_user_id: userId,
+						from_user_name: currentUserProfile.name,
+						is_read: false
+					} as any);
+			}
+
 			toasts.add('フォローしました！', 'success');
 			await fetchData();
 			await searchUsers(); // Refresh search preview
 		} catch (err) {
 			toasts.add('フォローに失敗しました', 'error');
 		}
+	}
+
+	function getFriendStatus(user: any) {
+		const { dayIndex, period, isAfterSchool } = currentSlot;
+		
+		if (isAfterSchool) return { label: '放課後', emoji: '🏠', color: 'bg-gray-100 text-gray-500', isClass: false };
+		if (period === null) return { label: '休み時間', emoji: '☕️', color: 'bg-blue-50 text-blue-500', isClass: false };
+
+		// Find class for current slot
+		const currentClass = user.User_Classes?.find((uc: any) => 
+			uc.Classes?.day_of_week === dayIndex && uc.Classes?.period === period
+		);
+
+		if (currentClass) {
+			return { 
+				label: `${period}限：${currentClass.Classes.name}`, 
+				room: currentClass.Classes.room,
+				emoji: '📍', 
+				color: 'bg-accent/10 text-accent',
+				isClass: true 
+			};
+		}
+
+		return { label: '空きコマ', emoji: '☕️', color: 'bg-green-50 text-green-600', isClass: false };
 	}
 
 	async function searchUsers() {
@@ -123,6 +184,7 @@
 	<header class="flex justify-between items-center px-1">
 		<h1 class="text-2xl font-black italic tracking-tighter">Friends</h1>
 		<div class="flex gap-2">
+			<NotificationBell userId={userId ?? ''} />
 			<button 
 				class="w-10 h-10 bg-black text-white rounded-xl flex items-center justify-center shadow-lg active:scale-95 transition-all"
 			>
@@ -236,6 +298,7 @@
 		<h2 class="text-xs font-black text-gray-400 uppercase tracking-widest px-1">すべての友達 ({friends.length})</h2>
 		<div class="flex flex-col gap-2">
 			{#each friends as friend}
+				{@const status = getFriendStatus(friend)}
 				<button 
 					class="w-full flex items-center justify-between p-3 rounded-2xl bg-white border border-border shadow-sm group hover:border-black/10 transition-colors cursor-pointer text-left"
 					onclick={() => goto(`/user/${friend.handle_id}`)}
@@ -244,7 +307,17 @@
 						<img src={friend.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${friend.handle_id}`} alt={friend.name} class="w-11 h-11 rounded-2xl object-cover bg-gray-50" />
 						<div class="flex flex-col">
 							<span class="text-sm font-bold leading-tight">{friend.name}</span>
-							<span class="text-[10px] font-bold text-gray-400 tracking-wider uppercase">@{friend.handle_id}</span>
+							<span class="text-[10px] font-bold text-gray-400 tracking-wider uppercase mb-1">@{friend.handle_id}</span>
+							
+							<div class="flex items-center gap-1.5 {status.color} px-2 py-1 rounded-lg w-fit">
+								<span class="text-[10px]">{status.emoji}</span>
+								<span class="text-[9px] font-black uppercase tracking-tight">
+									{status.label}
+									{#if status.room}
+										<span class="opacity-60 ml-1">({status.room})</span>
+									{/if}
+								</span>
+							</div>
 						</div>
 					</div>
 					<div class="flex gap-2">

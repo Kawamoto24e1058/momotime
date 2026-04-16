@@ -80,3 +80,51 @@ export const HOLIDAYS_2026 = [
   "2026-11-03", // 文化の日
   "2026-11-23"  // 勤労感謝の日
 ];
+
+export const DAYS = ['月', '火', '水', '木', '金', '土'];
+
+export const PERIOD_TIMES: Record<number, { start: string, end: string }> = {
+	1: { start: '09:20', end: '10:50' },
+	2: { start: '11:00', end: '12:30' },
+	3: { start: '13:20', end: '14:50' },
+	4: { start: '15:00', end: '16:30' },
+	5: { start: '16:40', end: '18:10' },
+	6: { start: '18:20', end: '19:50' }
+};
+
+/**
+ * 現在の曜日インデックスと時限を判定する
+ */
+export function getCurrentAcademicSlot(date: Date = new Date()) {
+	// 曜日判定 (月=0, ..., 土=5, 日=6)
+	const dayIndex = (date.getDay() + 6) % 7;
+	
+	const timeStr = date.toLocaleTimeString('ja-JP', { 
+		hour: '2-digit', 
+		minute: '2-digit', 
+		hour12: false 
+	});
+
+	let currentPeriod: number | null = null;
+	let isAfterSchool = false;
+
+	// 日曜日は一律放課後/休日扱い
+	if (dayIndex === 6) {
+		isAfterSchool = true;
+		return { dayIndex: 0, period: null, isAfterSchool };
+	}
+
+	for (const [period, times] of Object.entries(PERIOD_TIMES)) {
+		if (timeStr >= times.start && timeStr <= times.end) {
+			currentPeriod = parseInt(period);
+			break;
+		}
+	}
+
+	// 6限終了(19:50)以降を放課後とする
+	if (!currentPeriod && timeStr > '19:50') {
+		isAfterSchool = true;
+	}
+
+	return { dayIndex, period: currentPeriod, isAfterSchool };
+}

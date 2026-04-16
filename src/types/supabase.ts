@@ -130,6 +130,35 @@ export type Database = {
           created_at?: string
         }
       }
+      Notifications: {
+        Row: {
+          id: string
+          user_id: string
+          type: string
+          from_user_id: string
+          from_user_name: string
+          is_read: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          type: string
+          from_user_id: string
+          from_user_name: string
+          is_read?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          type?: string
+          from_user_id?: string
+          from_user_name?: string
+          is_read?: boolean
+          created_at?: string
+        }
+      }
     }
     Views: {
       [_ in never]: never

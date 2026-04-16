@@ -1,9 +1,10 @@
 <script lang="ts">
 	import { onMount, flushSync } from 'svelte';
-	import { Plus, Bell, MoreHorizontal, Calendar, Info, MapPin, User, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-svelte';
+	import { Plus, MoreHorizontal, Calendar, Info, MapPin, User, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-svelte';
 	import { supabase } from '$lib/supabaseClient';
 	import ImageUpload from '$lib/components/ImageUpload.svelte';
 	import TransportTimer from '$lib/components/TransportTimer.svelte';
+	import NotificationBell from '$lib/components/NotificationBell.svelte';
 	import { toasts } from '$lib/stores/toasts';
 	import { fade, slide, fly, scale } from 'svelte/transition';
 
@@ -76,6 +77,7 @@
 	}
 
 	function openAddModal(day: number, period: number) {
+		if (isDragging) return;
 		editData = {
 			name: '',
 			room: '',
@@ -90,6 +92,7 @@
 	}
 
 	function openEditModal(item: any) {
+		if (isDragging) return;
 		selectedClass = item;
 		editData = {
 			name: item.Classes.name,
@@ -308,36 +311,6 @@
 		}
 	}
 
-	// --- Swipe Handlers ---
-	let touchStartX = 0;
-	let touchStartY = 0;
-
-	function handleTouchStart(e: TouchEvent) {
-		if (isDragging) return; // Don't swipe while dragging
-		touchStartX = e.touches[0].clientX;
-		touchStartY = e.touches[0].clientY;
-	}
-
-	function handleTouchEnd(e: TouchEvent) {
-		if (isDragging) return;
-		const touchEndX = e.changedTouches[0].clientX;
-		const touchEndY = e.changedTouches[0].clientY;
-		
-		const deltaX = touchEndX - touchStartX;
-		const deltaY = touchEndY - touchStartY;
-
-		// Horizontal swipe threshold
-		if (Math.abs(deltaX) > 50 && Math.abs(deltaY) < 50) {
-			if (deltaX > 0) {
-				// Swipe Right -> Previous Day
-				selectedDay = (selectedDay - 1 + 6) % 6;
-			} else {
-				// Swipe Left -> Next Day
-				selectedDay = (selectedDay + 1) % 6;
-			}
-		}
-	}
-
 	// --- Drag & Drop Handlers ---
 	function onPointerDown(e: PointerEvent, day: number, period: number) {
 		const item = getClass(day, period);
@@ -379,15 +352,19 @@
 			handleSwap(dragSource, dropTarget);
 		}
 
-		// Reset state
-		isDragging = false;
+		// Reset state with a small delay to prevent click-through
+		setTimeout(() => {
+			isDragging = false;
+		}, 50);
 		dragSource = null;
 		dropTarget = null;
 	}
 
 	function onPointerCancel() {
 		clearTimeout(dragTimer);
-		isDragging = false;
+		setTimeout(() => {
+			isDragging = false;
+		}, 50);
 		dragSource = null;
 		dropTarget = null;
 	}
@@ -492,8 +469,6 @@
 <section 
 	class="flex flex-col gap-6"
 	role="main"
-	ontouchstart={handleTouchStart}
-	ontouchend={handleTouchEnd}
 >
 	<!-- Header -->
 	<header class="flex items-center justify-between">
@@ -531,9 +506,7 @@
 			>
 				<Calendar size={20} class={viewMode === 'weekly' ? 'text-accent' : 'text-gray-400'} />
 			</button>
-			<button class="p-2.5 rounded-2xl bg-white border border-border shadow-sm hover:bg-gray-50 transition-colors">
-				<Bell size={20} class="text-gray-400" />
-			</button>
+			<NotificationBell userId={userId ?? ''} />
 		</div>
 	</header>
 
@@ -541,7 +514,7 @@
 
 	{#if viewMode === 'daily'}
 		<!-- Day Selector -->
-		<div class="flex gap-2 pb-2 overflow-x-auto no-scrollbar scroll-smooth" in:fade>
+		<div class="flex overflow-x-auto whitespace-nowrap gap-2 px-4 py-2 no-scrollbar scroll-smooth" in:fade>
 			{#each days as day, i}
 				<button
 					class="px-5 py-2.5 rounded-full text-sm font-bold transition-all whitespace-nowrap relative {selectedDay === i
