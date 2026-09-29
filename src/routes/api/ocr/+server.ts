@@ -1,64 +1,99 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { extractTimetableFromImages } from '$lib/gemini';
+import type { Config } from '@sveltejs/adapter-vercel';
+import { extractTimetable, type TimetableInput } from '$lib/gemini';
 import { supabase } from '$lib/supabaseClient';
 
-export const config = {
-	runtime: 'edge'
+// Edge ランタイムは 25 秒以内に応答を始めないとタイムアウトし、
+// 画像が多いと Gemini の処理が間に合わず失敗していたため Node.js + 60 秒に変更。
+export const config: Config = {
+	runtime: 'nodejs22.x',
+	maxDuration: 60
 };
 
-export const POST: RequestHandler = async ({ request, locals }) => {
+const ALLOWED_MIME = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'application/pdf'];
+const MAX_FILES = 8;
+const MAX_TEXT_LENGTH = 30000;
+
+export const POST: RequestHandler = async ({ request }) => {
+	// ログイン中のユーザーだけが使えるようにする（API キーの無断利用対策）
+	const token = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
+	if (!token) {
+		return json({ error: 'ログインが必要です。再ログインしてください。' }, { status: 401 });
+	}
+	const { data: authData, error: authError } = await supabase.auth.getUser(token);
+	if (authError || !authData.user) {
+		return json({ error: 'ログインの有効期限が切れています。再ログインしてください。' }, { status: 401 });
+	}
+
+	let body: any;
 	try {
-		const { images, userId } = await request.json();
+		body = await request.json();
+	} catch {
+		return json({ error: 'リクエストが大きすぎるか、形式が不正です。画像の枚数を減らしてください。' }, { status: 400 });
+	}
 
-		if (!images || !Array.isArray(images) || !userId) {
-			return json({ error: 'Missing required fields' }, { status: 400 });
+	const input: TimetableInput = {};
+	if (Array.isArray(body.files) && body.files.length > 0) {
+		if (body.files.length > MAX_FILES) {
+			return json({ error: `一度に送れるのは${MAX_FILES}枚までです。` }, { status: 400 });
 		}
-
-		// 1. Extract data with fallback logic
-		let extractedClasses;
-		try {
-			// Primary: Gemini 3 Flash Preview
-			extractedClasses = await extractTimetableFromImages(images, 'gemini-3-flash-preview');
-			console.log("✅ OCR success using primary model (gemini-3-flash-preview)");
-		} catch (primaryError) {
-			console.warn("⚠️ Primary model (gemini-3-flash-preview) failed, attempting fallback to gemini-3.1-flash-lite-preview...");
-			try {
-				// Fallback: Gemini 3.1 Flash Lite Preview
-				extractedClasses = await extractTimetableFromImages(images, 'gemini-3.1-flash-lite-preview');
-				console.log("✅ OCR success using fallback model (gemini-3.1-flash-lite-preview)");
-			} catch (fallbackError) {
-				console.error("🚨 All Gemini models failed:", fallbackError);
-				return json({ 
-					error: '現在AIサーバーが非常に混み合っています。少し時間をおいてから再度お試しください。' 
-				}, { status: 503 });
+		for (const f of body.files) {
+			if (typeof f?.data !== 'string' || !ALLOWED_MIME.includes(f?.mimeType)) {
+				return json({ error: '対応していないファイル形式です（画像またはPDFのみ）。' }, { status: 400 });
 			}
 		}
-
-		// 2. Map results to frontend expected structure
-		const dayMap: Record<string, number> = { '月': 0, '火': 1, '水': 2, '木': 3, '金': 4, '土': 5, '日': 6 };
-		const finalExtractedClasses = extractedClasses.map((item: any) => {
-			const dayIdx = dayMap[item.day] ?? 0;
-			return {
-				name: item.name,
-				teacher: item.professor || null,
-				room: null,
-				day_of_week: dayIdx,
-				period: item.period,
-				is_remote: item.isRemote || false,
-				color: getDynamicColor(dayIdx),
-				isPending: true // Flag for frontend
-			};
-		});
-
-		return json({ 
-			success: true, 
-			classes: finalExtractedClasses
-		});
-	} catch (error: any) {
-		console.error("🚨 OCR API Error:", error);
-		return json({ error: error.message }, { status: 500 });
+		input.files = body.files;
 	}
+	if (typeof body.text === 'string' && body.text.trim()) {
+		input.text = body.text.trim().slice(0, MAX_TEXT_LENGTH);
+	}
+	if (!input.files && !input.text) {
+		return json({ error: '画像またはテキストを送信してください。' }, { status: 400 });
+	}
+
+	let extracted;
+	try {
+		extracted = await extractTimetable(input);
+	} catch (error: any) {
+		console.error('🚨 All Gemini models failed:', error);
+		const status = error?.status;
+		const message =
+			status === 429
+				? 'AIの利用上限に達しました。しばらく時間をおいてから再度お試しください。'
+				: status === 400
+					? '画像を読み込めませんでした。別のスクリーンショットでお試しください。'
+					: 'AIサーバーが混み合っています。少し時間をおいてから再度お試しください。';
+		return json({ error: message }, { status: 503 });
+	}
+
+	// 検証・正規化して、同じコマの重複を除去する
+	const dayMap: Record<string, number> = { 月: 0, 火: 1, 水: 2, 木: 3, 金: 4, 土: 5 };
+	const seen = new Set<string>();
+	const classes = [];
+	for (const item of extracted.classes) {
+		const day = dayMap[String(item.day ?? '').trim().charAt(0)];
+		const period = Number(item.period);
+		const name = String(item.name ?? '').trim();
+		if (day === undefined || !Number.isInteger(period) || period < 1 || period > 6 || !name) continue;
+
+		const key = `${day}-${period}`;
+		if (seen.has(key)) continue;
+		seen.add(key);
+
+		classes.push({
+			name,
+			teacher: item.professor?.trim() || null,
+			room: item.room?.trim() || null,
+			day_of_week: day,
+			period,
+			is_remote: Boolean(item.isRemote),
+			color: getDynamicColor(day),
+			isPending: true
+		});
+	}
+
+	return json({ success: true, classes, model: extracted.model });
 };
 
 function getDynamicColor(day: number) {

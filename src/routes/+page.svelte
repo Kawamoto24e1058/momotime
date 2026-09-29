@@ -288,12 +288,13 @@
 					classId = (newClass as any).id;
 				}
 
-				await (supabase.from('User_Classes') as any)
+				const { error: linkError } = await (supabase.from('User_Classes') as any)
 					.upsert({
 						user_id: userId,
 						class_id: classId,
 						color: item.color
 					}, { onConflict: 'user_id, class_id' });
+				if (linkError) throw linkError;
 			}
 			toasts.add('すべての授業を保存しました！', 'success');
 			pendingClasses = [];
@@ -369,6 +370,38 @@
 		dropTarget = null;
 	}
 
+	async function moveUserClass(item: any, day: number, period: number) {
+		const src = item.Classes;
+		let { data: classData, error: findError } = await (supabase.from('Classes') as any)
+			.select('id')
+			.eq('name', src.name)
+			.eq('day_of_week', day)
+			.eq('period', period)
+			.maybeSingle();
+		if (findError) throw findError;
+
+		if (!classData) {
+			const { data: newClass, error } = await (supabase.from('Classes') as any)
+				.insert({
+					name: src.name,
+					room: src.room,
+					teacher: src.teacher,
+					day_of_week: day,
+					period,
+					is_remote: src.is_remote
+				})
+				.select('id')
+				.single();
+			if (error) throw error;
+			classData = newClass;
+		}
+
+		const { error: linkError } = await (supabase.from('User_Classes') as any)
+			.update({ class_id: classData.id })
+			.eq('id', item.id);
+		if (linkError) throw linkError;
+	}
+
 	async function handleSwap(from: any, to: any) {
 		const item1 = from.item;
 		const item2 = getClass(to.day, to.period);
@@ -403,24 +436,17 @@
 		else {
 			try {
 				isLoading = true;
-				// Update Class A to New Slot
-				await (supabase.from('Classes') as any).update({
-					day_of_week: to.day,
-					period: to.period
-				}).eq('id', item1.Classes.id);
-
-				// If there was a Class B, move it to Class A's old slot
-				if (item2) {
-					await (supabase.from('Classes') as any).update({
-						day_of_week: from.day,
-						period: from.period
-					}).eq('id', item2.Classes.id);
-				}
+				// Classes は他のユーザーと共有されているので直接書き換えず、
+				// 移動先のコマの Class に自分の User_Classes を付け替える
+				await moveUserClass(item1, to.day, to.period);
+				if (item2) await moveUserClass(item2, from.day, from.period);
 
 				toasts.add('配置を更新しました', 'success');
-				fetchUserClasses();
 			} catch (err) {
+				console.error(err);
 				toasts.add('移動に失敗しました', 'error');
+			} finally {
+				fetchUserClasses();
 			}
 		}
 	}

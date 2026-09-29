@@ -18,35 +18,49 @@
 	let session = $state<any>(null);
 	let isInitialized = $state(false);
 
+	// ログインしていなくても開けるページ
+	const publicPaths = ['/login', '/reset-password'];
+	const isPublic = $derived(publicPaths.includes(page.url.pathname));
+
+	function redirectIfNeeded() {
+		const path = page.url.pathname;
+		if (!session && !publicPaths.includes(path)) {
+			goto('/login', { replaceState: true });
+		} else if (session && path === '/login') {
+			goto('/', { replaceState: true });
+		}
+	}
+
 	onMount(() => {
-		let subscription: any;
+		const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
+			session = newSession;
+			if (event === 'PASSWORD_RECOVERY') {
+				goto('/reset-password', { replaceState: true });
+				return;
+			}
+			if (isInitialized) redirectIfNeeded();
+		});
 
 		const init = async () => {
-			const { data: { session: initialSession } } = await supabase.auth.getSession();
-			session = initialSession;
-			isInitialized = true;
-
-			const { data: { subscription: sub } } = supabase.auth.onAuthStateChange((_event, newSession) => {
-				session = newSession;
-				if (!session && page.url.pathname !== '/login') {
-					goto('/login');
-				} else if (session && page.url.pathname === '/login') {
-					goto('/');
-				}
-			});
-			subscription = sub;
-
-			// Initial redirect check
-			if (!session && page.url.pathname !== '/login') {
-				goto('/login');
+			try {
+				const { data, error } = await supabase.auth.getSession();
+				if (error) throw error;
+				session = data.session;
+			} catch (error) {
+				// 保存されたトークンが壊れている/期限切れ (Invalid Refresh Token 等) だと
+				// 起動画面のまま固まっていたので、ローカルのセッションを破棄してログイン画面へ
+				console.warn('Session restore failed:', error);
+				await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
+				session = null;
+			} finally {
+				isInitialized = true;
+				redirectIfNeeded();
 			}
 		};
 
 		init();
 
-		return () => {
-			if (subscription) subscription.unsubscribe();
-		};
+		return () => subscription.unsubscribe();
 	});
 
 	const navItems = [
@@ -60,7 +74,7 @@
 <div class="min-h-screen bg-secondary pb-48">
 	<ToastContainer />
 	
-	{#if isInitialized}
+	{#if isInitialized && (session || isPublic)}
 		{#key page.url.pathname}
 			<main 
 				class="max-w-xl mx-auto px-4 pt-4 pb-12"
@@ -71,7 +85,7 @@
 			</main>
 		{/key}
 
-		{#if page.url.pathname !== '/login'}
+		{#if !isPublic}
 			<div class="fixed bottom-[74px] left-0 right-0 px-4 z-40">
 				<div class="max-w-xl mx-auto">
 					<PromoBanner />

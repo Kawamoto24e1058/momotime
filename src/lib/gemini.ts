@@ -1,64 +1,131 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI, SchemaType, type Part, type ResponseSchema } from '@google/generative-ai';
 import { GEMINI_API_KEY } from '$env/static/private';
+import { env } from '$env/dynamic/private';
 
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
-export async function extractTimetableFromImages(images: { image: string, mimeType: string }[], modelName = 'gemini-3-flash') {
-	const model = genAI.getGenerativeModel({ 
-		model: modelName,
-		generationConfig: { responseMimeType: 'application/json' }
-	});
+// プレビュー版モデルは予告なく廃止されるので、上から順に試す。
+// Vercel の環境変数 GEMINI_MODELS (カンマ区切り) でコード変更なしに差し替え可能。
+export const GEMINI_MODELS = (env.GEMINI_MODELS || 'gemini-3-flash-preview,gemini-3.5-flash,gemini-3.1-flash-lite')
+	.split(',')
+	.map((m) => m.trim())
+	.filter(Boolean);
 
-	const prompt = `
-    添付された複数の画像から、時間割データを統合して抽出してください。
-    あなたは桃山学院大学の学生向け時間割アプリで利用される、データ抽出の専門アシスタントです。
-    ユーザーから送信される複数の画像（学内ポータル「M-Port」の時間割画面のスクリーンショット）を解析し、以下の厳格なルールに従って授業データを抽出してください。
+export type TimetableInput = {
+	files?: { data: string; mimeType: string }[];
+	text?: string;
+};
 
-    【絶対厳守のルール（ハルシネーションの防止）】
-    1. 捏造の禁止: 画像内に明記されている文字のみを忠実に抽出してください。AIによる文脈からの推測や、架空の教授名・授業名の補完は絶対にしないでください。
-    2. 情報の欠落時の対応: 画像が不鮮明で見えない部分や、該当する情報が存在しない項目は、無理に推測せず「空文字("")」または「null」を出力してください。
-    3. 重複の統合: ユーザーは画面に収まりきらない時間割をスクロールして複数枚撮影しています。複数の画像間で「同じ曜日・同じ時限」の同一授業データが重複して読み取れた場合は、それらを統合し、一意のデータとして出力してください。
-    4. 遠隔授業のフラグ: 授業名や備考に「※遠隔授業（同時双方向型）」「※遠隔授業（オンデマンド型）」などの記載が含まれている場合のみ、isRemoteを true にしてください。記載がない場合は false にしてください。
-    5. 余計なテキストの排除: 挨拶や説明、「抽出しました」などのテキストは一切不要です。純粋なJSON配列のみを返してください。
-    6. 文脈の保持: ユーザーはスマホの縦長画面をスクロールして複数枚撮影しています。画像が切り替わっても、直前に表示されていた『曜日』のヘッダーを強く意識し、決して他の曜日と混同しないでください。
-    7. 厳格なマッピング: 各授業のブロック内に記載されている情報だけでなく、そのブロックが『どの曜日』の『何限』の区画に属しているかを、画面全体のレイアウトから慎重に逆算して特定してください。
-    8. 情報のクリーニング（重要）: 科目名の中に含まれる「<春>」や「<通期>」などの学期情報、および「(2026-春学期-月1-他)」のようなシステム上の不要な文字列は完全に削除し、純粋な『科目名』のみを抽出してください。
-    9. 【重要：見切れた曜日の逆算推論】: M-Portのモバイル画面は、上から下へ『月→火→水→木→金→土』の順番で縦に曜日ブロックが並んでいます。ユーザーのスクロールにより、特定の曜日ヘッダー（例：『木』）が画面外に見切れており、いきなり授業データから始まっている画像が送られてくることがあります。その場合、絶対に曜日を勘違いせず、画像内のさらに下部にある曜日のヘッダー（例：『金』や『土』）を探してください。そして、『金曜日のブロックの直上にあるのだから、見切れているこのブロックは木曜日である』というように、前後の配置順から逆算して曜日を正確に特定してください。
+export type ExtractedClass = {
+	day: string;
+	period: number;
+	name: string;
+	professor: string | null;
+	room: string | null;
+	isRemote: boolean;
+};
 
-    【出力スキーマ（JSON）】
-    以下の構造を持つJSON配列として出力してください。
-    [
-      {
-        "day": "月",
-        "period": 1,
-        "name": "経済原論 01",
-        "professor": "金江 亮",
-        "isRemote": false
-      }
-    ]
-  `;
-
-	const imageParts = images.map(img => ({
-		inlineData: {
-			data: img.image,
-			mimeType: img.mimeType
-		}
-	}));
-
-	const result = await model.generateContent([
-		prompt,
-		...imageParts
-	]);
-
-	const response = await result.response;
-	const text = response.text();
-	
-	try {
-        // Clean the response in case Gemini adds markdown blocks
-        const cleanedText = text.replace(/```json/g, '').replace(/```/g, '').trim();
-		return JSON.parse(cleanedText);
-	} catch (error) {
-		console.error('Failed to parse Gemini response:', text);
-		throw new Error('OCR結果の解析に失敗しました。');
+const responseSchema: ResponseSchema = {
+	type: SchemaType.ARRAY,
+	items: {
+		type: SchemaType.OBJECT,
+		properties: {
+			day: { type: SchemaType.STRING, enum: ['月', '火', '水', '木', '金', '土'], format: 'enum' },
+			period: { type: SchemaType.INTEGER },
+			name: { type: SchemaType.STRING },
+			professor: { type: SchemaType.STRING, nullable: true },
+			room: { type: SchemaType.STRING, nullable: true },
+			isRemote: { type: SchemaType.BOOLEAN }
+		},
+		required: ['day', 'period', 'name', 'isRemote']
 	}
+};
+
+const PROMPT = `
+あなたは桃山学院大学の学生向け時間割アプリのデータ抽出アシスタントです。
+入力は学内ポータル「M-Port」の時間割画面（スクリーンショット画像・PDF・またはコピーしたテキスト）です。
+時間割に登録されている授業を抽出して JSON 配列で返してください。
+
+【ルール】
+1. 捏造禁止: 入力に書かれている文字だけを使うこと。読めない・存在しない項目は null にする。
+2. 重複統合: スクロールして複数枚撮影されているため、同じ曜日・同じ時限の同一授業は 1 件にまとめる。
+3. 曜日の特定: M-Port のスマホ画面は上から「月→火→水→木→金→土」の順に曜日ブロックが縦に並ぶ。
+   画像の先頭で曜日ヘッダーが見切れている場合は、画像内の次の曜日ヘッダーから逆算する（例: 直下が「金」なら見切れているのは「木」）。
+   PC 版の表形式の場合は列見出しの曜日・行見出しの時限を使う。
+4. 時限: 「1限」「1時限」「月1」などの数字を period に入れる。
+5. 科目名のクリーニング: 「<春>」「<通期>」「(2026-春学期-月1-他)」のような学期・システム用の文字列は削除し、純粋な科目名だけにする。クラス番号（例: "01"）は残す。
+6. 教員名は professor、教室（例: "1-201", "聖アンデレ館 3F"）が書かれていれば room に入れる。
+7. 「遠隔授業」「オンデマンド」「同時双方向」の記載がある場合のみ isRemote を true にする。
+8. 授業が無いコマ（空欄・「-」）は出力しない。
+`;
+
+function buildParts(input: TimetableInput): (string | Part)[] {
+	const parts: (string | Part)[] = [PROMPT];
+	if (input.text) {
+		parts.push(`【M-Port からコピーしたテキスト】\n${input.text}`);
+	}
+	for (const f of input.files ?? []) {
+		parts.push({ inlineData: { data: f.data, mimeType: f.mimeType } });
+	}
+	return parts;
+}
+
+// Vercel の maxDuration (60 秒) 内に全モデルの試行を収める
+const TOTAL_DEADLINE_MS = 55_000;
+const PER_MODEL_TIMEOUT_MS = 35_000;
+
+async function extractWithModel(input: TimetableInput, modelName: string, timeout: number): Promise<ExtractedClass[]> {
+	const model = genAI.getGenerativeModel(
+		{
+			model: modelName,
+			generationConfig: {
+				responseMimeType: 'application/json',
+				responseSchema,
+				temperature: 0
+			}
+		},
+		{ timeout }
+	);
+
+	const result = await model.generateContent(buildParts(input));
+	const text = result.response.text();
+
+	try {
+		const cleaned = text.replace(/```json/g, '').replace(/```/g, '').trim();
+		const parsed = JSON.parse(cleaned);
+		if (!Array.isArray(parsed)) throw new Error('not an array');
+		return parsed;
+	} catch {
+		console.error(`[${modelName}] Failed to parse Gemini response:`, text.slice(0, 500));
+		throw new Error('AIの応答を解析できませんでした');
+	}
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * GEMINI_MODELS を順番に試し、最初に成功した結果を返す。
+ * Gemini は混雑時に 503 を頻繁に返すので、全モデル失敗したら少し待ってもう一巡する。
+ */
+export async function extractTimetable(input: TimetableInput): Promise<{ classes: ExtractedClass[]; model: string }> {
+	const deadline = Date.now() + TOTAL_DEADLINE_MS;
+	let lastError: unknown;
+	for (let round = 0; round < 2; round++) {
+		if (round > 0) await sleep(1500);
+		for (const modelName of GEMINI_MODELS) {
+			const remaining = deadline - Date.now();
+			if (remaining < 5_000) throw lastError ?? new Error('timeout');
+			try {
+				const classes = await extractWithModel(input, modelName, Math.min(PER_MODEL_TIMEOUT_MS, remaining));
+				console.log(`✅ OCR success using ${modelName} (${classes.length} classes)`);
+				return { classes, model: modelName };
+			} catch (err: any) {
+				console.warn(`⚠️ ${modelName} failed: ${err?.status ?? ''} ${err?.message ?? err}`);
+				lastError = err;
+				// 画像が不正など、リトライしても直らないエラーは即終了
+				if (err?.status === 400) throw err;
+			}
+		}
+	}
+	throw lastError;
 }
