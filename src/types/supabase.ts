@@ -40,6 +40,7 @@ export type Database = {
           room: string | null
           day_of_week: number
           period: number
+          is_remote: boolean
           created_at: string
         }
         Insert: {
@@ -49,6 +50,7 @@ export type Database = {
           room?: string | null
           day_of_week: number
           period: number
+          is_remote?: boolean
           created_at?: string
         }
         Update: {
@@ -58,6 +60,7 @@ export type Database = {
           room?: string | null
           day_of_week?: number
           period?: number
+          is_remote?: boolean
           created_at?: string
         }
       }
